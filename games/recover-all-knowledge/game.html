@@ -1,0 +1,2195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Hex Sentinel — I, Robot Scan + Terrain Occlusion</title>
+<style>
+  /* 1. Base Layout and Aesthetic */
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #000;
+    color: #9f9;
+    font-family: monospace;
+    overflow: hidden;
+  }
+  
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    cursor: crosshair;
+  }
+
+  /* 2. HUD and Interactive HUD Elements */
+  .hud {
+    position: fixed;
+    left: 12px;
+    top: 10px;
+    font-size: 12px;
+    opacity: .9;
+    /* This allows clicks to hit the canvas behind the HUD */
+    pointer-events: none; 
+    z-index: 10;
+  }
+  
+  /* This re-enables clicking specifically for the Instructions link */
+  #hud span {
+    pointer-events: auto;
+  }
+  
+  .alert { color: #ff8080; }
+
+  /* 3. Instructions Modal Overlay */
+  #instr-overlay {
+    display: none; /* Hidden by default */
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 320px;
+    background: rgba(0, 20, 0, 0.95);
+    border: 2px solid #9f9;
+    color: #9f9;
+    padding: 20px;
+    z-index: 1000;
+    box-shadow: 0 0 20px #0f0;
+  }
+
+  #instr-overlay h2 { 
+    margin-top: 0; 
+    color: #fff; 
+    text-align: center; 
+    border-bottom: 1px solid #9f9; 
+    padding-bottom: 10px;
+  }
+
+  #instr-overlay ul { 
+    padding-left: 20px; 
+    line-height: 1.6; 
+  }
+
+  /* 4. Close Button Styling */
+  .close-btn {
+    display: block;
+    margin: 20px auto 0;
+    background: #040;
+    color: #9f9;
+    border: 1px solid #9f9;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-family: monospace;
+    text-transform: uppercase;
+  }
+
+  .close-btn:hover {
+    background: #9f9;
+    color: #000;
+  }
+
+  #static-instr-btn {
+  position: fixed;
+  top: 10px;
+  right: 12px;
+  background: rgba(0, 40, 0, 0.8);
+  color: #9f9;
+  border: 1px solid #9f9;
+  padding: 5px 10px;
+  font-family: monospace;
+  cursor: pointer;
+  z-index: 1001; /* Sits above everything */
+}
+#static-instr-btn:hover {
+  background: #9f9;
+  color: #000;
+}
+
+#node-popup {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 320px;
+    background: rgba(15, 5, 0, 0.95);
+    border: 2px solid #ff8800;
+    color: #ff8800;
+    padding: 20px;
+    z-index: 99999; /* Ensure it is above EVERYTHING */
+    text-align: center;
+    font-family: monospace;
+    box-shadow: 0 0 30px rgba(255, 136, 0, 0.3);
+    pointer-events: auto !important; /* This is the critical line */
+  }
+
+  .node-btn {
+    background: transparent;
+    border: 1px solid #ff8800;
+    color: #ff8800;
+    padding: 10px 20px;
+    margin-top: 20px;
+    cursor: pointer;
+    font-family: monospace;
+    transition: all 0.2s;
+  }
+
+  .node-btn:hover {
+    background: #ff8800;
+    color: #000;
+  }
+
+  /* Add this to your style section */
+#node-popup {
+  pointer-events: auto !important; /* Forces the popup to accept clicks */
+  user-select: none; /* Prevents accidental text highlighting while clicking hit/stand */
+}
+
+.category-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  border-radius: 3px;
+  margin-bottom: 8px;
+  letter-spacing: 1px;
+}
+
+</style>
+</head>
+<body>
+<div style="position:fixed; bottom:20px; left:20px; display:flex; gap:10px; pointer-events:none; z-index:100;">
+  <div style="width:50px; height:50px;">
+    <svg viewBox="0 0 100 115" style="width:100%; height:100%;">
+      <defs><clipPath id="hex-clip"><polygon points="50,0 100,28.75 100,86.25 50,115 0,86.25 0,28.75" /></clipPath></defs>
+      <polygon points="50,0 100,28.75 100,86.25 50,115 0,86.25 0,28.75" fill="#1a0a25" stroke="#cc88ff" stroke-width="2" />
+      <rect id="fill-LOGOS" x="0" y="115" width="100" height="0" fill="#cc88ff" fill-opacity="0.6" clip-path="url(#hex-clip)" style="transition: all 0.5s ease-out;" />
+    </svg>
+  </div>
+  <div style="width:50px; height:50px;">
+    <svg viewBox="0 0 100 115" style="width:100%; height:100%;">
+      <polygon points="50,0 100,28.75 100,86.25 50,115 0,86.25 0,28.75" fill="#0a251a" stroke="#00ff88" stroke-width="2" />
+      <rect id="fill-BIOS" x="0" y="115" width="100" height="0" fill="#00ff88" fill-opacity="0.6" clip-path="url(#hex-clip)" style="transition: all 0.5s ease-out;" />
+    </svg>
+  </div>
+  <div style="width:50px; height:50px;">
+    <svg viewBox="0 0 100 115" style="width:100%; height:100%;">
+      <polygon points="50,0 100,28.75 100,86.25 50,115 0,86.25 0,28.75" fill="#25200a" stroke="#ffcc00" stroke-width="2" />
+      <rect id="fill-CHRONOS" x="0" y="115" width="100" height="0" fill="#ffcc00" fill-opacity="0.6" clip-path="url(#hex-clip)" style="transition: all 0.5s ease-out;" />
+    </svg>
+  </div>
+  <div style="width:50px; height:50px;">
+    <svg viewBox="0 0 100 115" style="width:100%; height:100%;">
+      <polygon points="50,0 100,28.75 100,86.25 50,115 0,86.25 0,28.75" fill="#0a1a25" stroke="#00ccff" stroke-width="2" />
+      <rect id="fill-TECH" x="0" y="115" width="100" height="0" fill="#00ccff" fill-opacity="0.6" clip-path="url(#hex-clip)" style="transition: all 0.5s ease-out;" />
+    </svg>
+  </div>
+  <div style="width:50px; height:50px;">
+    <svg viewBox="0 0 100 115" style="width:100%; height:100%;">
+      <polygon points="50,0 100,28.75 100,86.25 50,115 0,86.25 0,28.75" fill="#250a0a" stroke="#ff3366" stroke-width="2" />
+      <rect id="fill-ETHOS" x="0" y="115" width="100" height="0" fill="#ff3366" fill-opacity="0.6" clip-path="url(#hex-clip)" style="transition: all 0.5s ease-out;" />
+    </svg>
+  </div>
+</div>
+<canvas id="c"></canvas>
+<div id="instr-overlay">
+  <h2>MISSION PROTOCOL</h2>
+  <p> You must recover all human knowledge by finding and winning fragments
+    <br> Fragements are Orange Tiles with spires, when you have won all 10 on a level your Archive Hex's will fill
+    <br> When 10 are recoveed the sentenils sheild will drop and you cann destroy th elevel gaurdian and progress.
+    <br> If all all Archhive hexe's are full you may return to the mothership.
+  </p>
+  <ul>
+    <li><b>WASD</b>: Navigate Sectors</li>
+    <li><b>SPACE</b>: Discharge Collected Energy</li>
+    <li><b>OBJECTIVE</b>: Paint the terrain to gather energy. Destroy the Sentinel to advance.</li>
+    <li><b>SECTOR DANGER</b>: If ammo is 0, the Sentinel drains your Core Integrity directly.</li>
+  </ul>
+  <button class="close-btn" onclick="document.getElementById('instr-overlay').style.display='none'">[ CLOSE ]</button>
+</div>
+<button id="static-instr-btn" onclick="event.stopPropagation(); document.getElementById('instr-overlay').style.display='block';">
+  MISSION PROTOCOL
+</button>
+
+<div class="hud" id="hud">Instructions</div>
+<script>
+(() => {
+
+function getWikiCategory(fullText) {
+  const d = (fullText || "").toLowerCase();
+  
+  // BIOS
+  if (d.match(/species|plant|animal|biolog|mammal|tree|human|nature|health|organism|bird|fish|fungi|flower|anatomy|medical|cell|dna|evolution/)) 
+    return { name: "BIOS", color: "#00ff88" };
+    
+  // TECH
+  if (d.match(/software|space|engine|physic|comput|chemical|science|technology|system|math|circuit|robot|aircraft|weapon|nuclear|satellite|internet/)) 
+    return { name: "TECH", color: "#00ccff" };
+    
+  // CHRONOS
+  if (d.match(/history|century|city|empire|battle|dynasty|person|politician|village|river|war|born|government|state|country|king|queen|ancient|archaeology|island/)) 
+    return { name: "CHRONOS", color: "#ffcc00" };
+    
+  // ETHOS
+  if (d.match(/film|novel|artist|album|music|myth|book|painting|sculpture|writer|language|culture|religion|philosophy|god|theatre|dance|cuisine|sport/)) 
+    return { name: "ETHOS", color: "#ff3366" };
+    
+  // LOGOS
+  return { name: "LOGOS", color: "#cc88ff" };
+}
+
+// ============================================================
+// HexAudio - SID/Hubbard Generative Sound Engine
+// ============================================================
+const HexAudio = {
+  ctx: null,
+  isStarted: false,
+  masterGain: null,
+  reverb: null,
+  delay: null,
+  
+  // Synthesis & Effect Nodes
+  droneOsc1: null, droneOsc2: null, filter: null,
+  lfo: null, lfoGain: null,
+  gritOsc: null, gritGain: null,
+  tremoloLFO: null, tremoloGain: null,
+
+  // Drum Machine State
+  drumGain: null,
+  dryGain: null, 
+  nextNoteTime: 0,
+  currentStep: 0,
+
+  // 1. DYNAMIC LOGIC
+  getBPM() {
+    if (!world.sentinel) return 90;
+    
+    // Calculate percentage of health lost (0.0 to 1.0)
+    const damagePct = (world.sentinel.maxHealth - world.sentinel.health) / world.sentinel.maxHealth;
+    
+    // Increase BPM by 1% for every 1% of damage
+    // Starting at 90 BPM, a dead Sentinel (100% damage) results in 180 BPM
+    return 90 * (1 + damagePct);
+  },
+
+  getNote(level) {
+    const roots = [65.4, 73.4, 82.4, 87.3, 98.0, 110.0, 123.5]; 
+    return roots[level % roots.length];
+  },
+
+  getNoteFromScale(rootFreq) {
+    const steps = [0, 2, 4, 5, 7, 9, 11]; 
+    const randomStep = steps[Math.floor(Math.random() * steps.length)];
+    const randomOctave = Math.floor(Math.random() * 3) + 3;
+    return rootFreq * Math.pow(2, randomOctave + randomStep / 12);
+  },
+
+  // 2. 808 SYNTHESIS
+  playKick(time) {
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.frequency.setValueAtTime(150, time);
+    osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.5);
+    g.gain.setValueAtTime(0.8, time);
+    g.gain.exponentialRampToValueAtTime(0.01, time + 0.5);
+    osc.connect(g); 
+    g.connect(this.dryGain); 
+    g.connect(this.drumGain); 
+    osc.start(time); osc.stop(time + 0.5);
+  },
+
+  playSnare(time) {
+    const noise = this.ctx.createBufferSource();
+    const g = this.ctx.createGain();
+    const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.2, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    noise.buffer = buf;
+    g.gain.setValueAtTime(0.3, time);
+    g.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
+    noise.connect(g); 
+    g.connect(this.dryGain);
+    g.connect(this.drumGain);
+    noise.start(time); noise.stop(time + 0.2);
+  },
+
+  playHH(time) {
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(12000, time);
+    g.gain.setValueAtTime(0.05, time);
+    g.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
+    osc.connect(g); g.connect(this.drumGain);
+    osc.start(time); osc.stop(time + 0.05);
+  },
+
+  playClap(time) {
+    const g = this.ctx.createGain();
+    const noise = this.ctx.createBufferSource();
+    const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.15, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    noise.buffer = buf;
+    g.gain.setValueAtTime(0.2, time);
+    g.gain.exponentialRampToValueAtTime(0.01, time + 0.3);
+    noise.connect(g); g.connect(this.drumGain);
+    noise.start(time); noise.stop(time + 0.3);
+  },
+
+  // 3. ENGINE INITIALIZATION
+  init() {
+    if (this.isStarted) return;
+    try {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+      
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.value = 0.25;
+
+      // DRUM PATHS
+      this.drumGain = this.ctx.createGain(); // Wet Reverb Path
+      this.dryGain = this.ctx.createGain();  // Direct Path
+      this.dryGain.gain.value = 0.5;
+
+      // SPACE (Reverb + Delay)
+      this.reverb = this.ctx.createConvolver();
+      const rate = this.ctx.sampleRate, len = rate * 4.0, buff = this.ctx.createBuffer(2, len, rate);
+      for(let i=0; i<2; i++) {
+        let ch = buff.getChannelData(i);
+        for(let j=0; j<len; j++) ch[j] = (Math.random()*2-1) * Math.pow(1-j/len, 1.8);
+      }
+      this.reverb.buffer = buff;
+
+      this.delay = this.ctx.createDelay();
+      this.delay.delayTime.value = 0.4;
+      const fb = this.ctx.createGain();
+      fb.gain.value = 0.5;
+
+      // ROUTING
+      this.drumGain.connect(this.reverb);
+      this.reverb.connect(this.ctx.destination); // FIX: Reverb now goes to speakers
+      this.dryGain.connect(this.ctx.destination); // FIX: Dry drums now go to speakers
+      
+      this.masterGain.connect(this.delay);
+      this.delay.connect(fb); fb.connect(this.delay);
+      this.delay.connect(this.reverb);
+      this.masterGain.connect(this.ctx.destination);
+
+      // DRONE (Sawtooth Unison)
+      this.droneOsc1 = this.ctx.createOscillator();
+      this.droneOsc2 = this.ctx.createOscillator();
+      this.droneOsc1.type = 'sawtooth';
+      this.droneOsc2.type = 'sawtooth';
+      this.droneOsc1.detune.value = -7; 
+      this.droneOsc2.detune.value = 7; 
+
+      this.filter = this.ctx.createBiquadFilter();
+      this.filter.type = "lowpass";
+      this.filter.frequency.value = 1000;
+      this.filter.Q.value = 8;
+
+      this.lfo = this.ctx.createOscillator();
+      this.lfo.frequency.value = 0.05; 
+      this.lfoGain = this.ctx.createGain();
+      this.lfoGain.gain.value = 800; 
+
+      this.lfo.connect(this.lfoGain);
+      this.lfoGain.connect(this.filter.frequency);
+      this.droneOsc1.connect(this.filter);
+      this.droneOsc2.connect(this.filter);
+      this.filter.connect(this.masterGain);
+
+      // IMPACT EFFECTS (Tremolo + Grit)
+      this.tremoloLFO = this.ctx.createOscillator();
+      this.tremoloLFO.type = 'square';
+      this.tremoloLFO.frequency.value = 20;
+      this.tremoloGain = this.ctx.createGain();
+      this.tremoloGain.gain.value = 0;
+      this.tremoloLFO.connect(this.tremoloGain);
+      this.tremoloGain.connect(this.masterGain.gain);
+
+      this.gritOsc = this.ctx.createOscillator();
+      this.gritOsc.type = 'square';
+      this.gritOsc.frequency.value = 40;
+      this.gritGain = this.ctx.createGain();
+      this.gritGain.gain.value = 0;
+      this.gritOsc.connect(this.gritGain);
+      this.gritGain.connect(this.masterGain);
+
+      this.droneOsc1.start(); this.droneOsc2.start(); 
+      this.lfo.start(); this.tremoloLFO.start(); this.gritOsc.start();
+
+      this.nextNoteTime = this.ctx.currentTime;
+      this.isStarted = true;
+    } catch(e) { console.error(e); }
+  },
+
+  playCoinChime() {
+    if (!this.isStarted) return;
+    const now = this.ctx.currentTime;
+    
+    // We use a high frequency pair that sits above the low drones
+    const pitches = [880, 1318]; 
+    
+    pitches.forEach((freq, i) => {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, now + (i * 0.1));
+      
+      // INCREASED VOLUME:
+      // Note 1 starts at 0.3, Note 2 starts at 0.45 for that "ping" emphasis
+      const volume = i === 0 ? 0.3 : 0.45;
+      
+      g.gain.setValueAtTime(volume, now + (i * 0.5));
+      // Sharp exponential decay keeps it from muddying the background mix
+      g.gain.exponentialRampToValueAtTime(0.0001, now + (i * 0.1) + 0.5);
+      
+      osc.connect(g).connect(this.masterGain);
+      osc.start(now + (i * 0.1));
+      osc.stop(now + (i * 0.1) + 0.5);
+    });
+  },
+
+  playCapture() {
+    if (!this.isStarted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    const freq = this.getNoteFromScale(this.getNote(currentLevel));
+    osc.frequency.setValueAtTime(freq, now);
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(0.3, now + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+    osc.connect(g); g.connect(this.delay);
+    osc.start(now); osc.stop(now + 1.2);
+  },
+
+  update() {
+    if (!this.isStarted) return;
+    const now = this.ctx.currentTime;
+
+    // 1. DRUM SEQUENCER
+    const secondsPerBeat = 60.0 / this.getBPM() / 4;
+    while (this.nextNoteTime < now + 0.1) {
+      this.schedulePattern(this.currentStep, this.nextNoteTime);
+      this.nextNoteTime += secondsPerBeat;
+      this.currentStep = (this.currentStep + 1) % 16;
+    }
+
+    // 2. DRONE TRANSITIONS
+    const baseFreq = this.getNote(currentLevel);
+    this.droneOsc1.frequency.setTargetAtTime(baseFreq, now, 0.5);
+    this.droneOsc2.frequency.setTargetAtTime(baseFreq, now, 0.5);
+
+    // 3. IMPACT DETECTION
+    const isHitting = hexProjectiles.some(p => {
+        const d = Math.hypot(p.x - world.sentinel.x, p.y - (world.sentinel.h + 15), p.z - world.sentinel.z);
+        return d < 15;
+    });
+
+    if (isHitting) {
+      this.tremoloGain.gain.setTargetAtTime(0.4, now, 0.02);
+      this.gritGain.gain.setTargetAtTime(0.15, now, 0.02);
+      this.filter.frequency.setTargetAtTime(4500, now, 0.02);
+    } else {
+      this.tremoloGain.gain.setTargetAtTime(0, now, 0.1);
+      this.gritGain.gain.setTargetAtTime(0, now, 0.1);
+      if (sentinelLock) {
+        this.filter.frequency.setTargetAtTime(3500, now, 0.1); 
+        this.filter.Q.setTargetAtTime(25, now, 0.1);
+      } else {
+        this.filter.frequency.setTargetAtTime(1000, now, 0.5); 
+        this.filter.Q.setTargetAtTime(8, now, 0.5);
+      }
+    }
+  },
+
+  schedulePattern(step, time) {
+    if (step === 0 || step === 8 || step === 10) this.playKick(time);
+    if (step === 4 || step === 12) this.playSnare(time);
+    if (step % 2 === 0) this.playHH(time); 
+    if (step === 10 || step === 14) this.playClap(time);
+  }
+};
+
+// ============================================================
+// Canvas
+// ============================================================
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d",{alpha:false});
+
+let W,H,DPR;
+function resize(){
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  W=canvas.width=innerWidth*DPR;
+  H=canvas.height=innerHeight*DPR;
+}
+addEventListener("resize",resize);
+resize();
+
+// ============================================================
+// Noise
+// ============================================================
+
+function xmur3(str){
+  let h=1779033703^str.length;
+  for(let i=0;i<str.length;i++){
+    h=Math.imul(h^str.charCodeAt(i),3432918353);
+    h=(h<<13)|(h>>>19);
+  }
+  return ()=>((h=Math.imul(h^(h>>>16),2246822507),
+               h=Math.imul(h^(h>>>13),3266489909),
+               (h^=h>>>16)>>>0));
+}
+
+function hash2(i,j,s){
+  let n=(i*374761393+j*668265263)^s;
+  n=(n^(n>>>13))*1274126177;
+  n^=n>>>16;
+  return (n>>>0)/4294967296;
+}
+
+function lerp(a,b,t){return a+(b-a)*t;}
+function smooth(t){return t*t*(3-2*t);}
+
+function valueNoise(x,z,s,scale){
+  const sx=x/scale, sz=z/scale;
+  const x0=Math.floor(sx), z0=Math.floor(sz);
+  const x1=x0+1, z1=z0+1;
+  const tx=smooth(sx-x0);
+  const tz=smooth(sz-z0);
+
+  const v00=hash2(x0,z0,s);
+  const v10=hash2(x1,z0,s);
+  const v01=hash2(x0,z1,s);
+  const v11=hash2(x1,z1,s);
+
+  return lerp(lerp(v00,v10,tx),lerp(v01,v11,tx),tz);
+}
+
+function fbm(x,z,s){
+  let a=1,f=1,sum=0,norm=0;
+  for(let i=0;i<5;i++){
+    sum+=valueNoise(x*f,z*f,s^i,40)*a;
+    norm+=a;
+    a*=0.55;
+    f*=2;
+  }
+  return sum/norm;
+}
+
+// ============================================================
+// Hex math
+// ============================================================
+
+const HEX_DIRS = [
+  [1,0],[1,-1],[0,-1],
+  [-1,0],[-1,1],[0,1]
+];
+
+function hexToWorld(q,r,size){
+  return{
+    x:size*Math.sqrt(3)*(q+r/2),
+    z:size*1.5*r
+  };
+}
+
+function hexCorners(x,y,z,size){
+  const pts=[];
+  for(let i=0;i<6;i++){
+    const a=(Math.PI/180)*(60*i-30);
+    pts.push({
+      x:x+size*Math.cos(a),
+      y:y,
+      z:z+size*Math.sin(a)
+    });
+  }
+  return pts;
+}
+
+function key(q,r){ return q+","+r; }
+
+// World→Axial (pointy top) + cube rounding (fast height queries for occlusion)
+function axialFromWorld(x,z,size){
+  // pointy top axial conversion (redblobgames)
+  const q = (Math.sqrt(3)/3 * x - 1/3 * z) / size;
+  const r = (2/3 * z) / size;
+  return {q,r};
+}
+function cubeRound(x,y,z){
+  let rx=Math.round(x), ry=Math.round(y), rz=Math.round(z);
+  const dx=Math.abs(rx-x), dy=Math.abs(ry-y), dz=Math.abs(rz-z);
+  if(dx>dy && dx>dz) rx = -ry - rz;
+  else if(dy>dz) ry = -rx - rz;
+  else rz = -rx - ry;
+  return {x:rx,y:ry,z:rz};
+}
+function axialRound(q,r){
+  // axial -> cube, round, back
+  const x=q, z=r, y=-x-z;
+  const cr=cubeRound(x,y,z);
+  return {q:cr.x, r:cr.z};
+}
+
+//======
+//fire controls
+//======
+let spaceWasDown = false;
+
+//======
+//make sue sent can see the edge of the world
+//======
+let sentinelHitPlayer = false;
+
+// For player lose condition
+let playerDamage = 0; 
+let gameLost = false;
+
+// world.visited already exists; we will ensure it isn't cleared on level load.
+let currentLevel = 1;
+
+// for the encouter trigger
+let isPaused = false;
+
+// ============================================================
+// World
+// ============================================================
+
+  window.world = {
+  radius:26,
+  hexSize:10,
+  heightScale:70,
+  baseY:-12,
+  cols:[],
+  map:new Map(),
+  visited: new Set(),
+  spent: new Set(), // <--- Tracks hexes used as ammo
+  sentinel:null,
+  shieldsActive: 10,
+  logosPercent: 0,
+  biosPercent: 0,
+  chronosPercent: 0,
+  techPercent: 0,
+  ethosPercent: 0
+};
+
+function genWorld(seed="HEX"){
+  const s=xmur3(seed)();
+  world.cols.length=0;
+  world.map.clear();
+  world.sentinel=null;
+
+  // FIX: Reset Sentinel Shields for the new level
+  world.shieldsActive = 10;
+
+  // --- NEW: Sentinel Node Quota Tracker ---
+  // This ensures we get exactly 10 nodes if possible, or 1-10 randomly.
+  let nodesToSpawn = 10; 
+  let spawnedNodes = 0;
+
+  // --- LEVEL SCALING ---
+  const flatteningFactor = Math.max(0.2, 1.0 - (currentLevel - 1) * 0.15);
+  const dynamicHeightScale = world.heightScale * flatteningFactor;
+
+  const R=world.radius;
+
+  for(let q=-R;q<=R;q++){
+    const r1=Math.max(-R,-q-R);
+    const r2=Math.min(R,-q+R);
+
+    for(let r=r1;r<=r2;r++){
+      const {x,z}=hexToWorld(q,r,world.hexSize);
+
+      const macro = fbm(x*0.35, z*0.35, s);
+      const mid = fbm(x*1.0, z*1.0, s ^ 0x9e3779b9);
+      const ridgeBase = fbm(x*2.2, z*2.2, s ^ 0x85ebca6b);
+      const ridge = Math.pow(1 - Math.abs(2*ridgeBase - 1), 2.2);
+
+      let hNorm = macro * 0.45 + mid * 0.30 + ridge * 0.55;
+      hNorm = Math.pow(Math.max(0, hNorm), 1.35);
+
+      const dist = Math.hypot(q, r) / world.radius;
+      const island = Math.max(0, 1 - dist * 0.85);
+      hNorm *= (0.55 + island * 0.75);
+
+      const h = world.baseY + hNorm * dynamicHeightScale;
+
+      // --- NEW: Sentinel Node Assignment Logic ---
+      let type = "standard";
+      // Chance to be a node (approx 1.5%), only if we haven't reached the limit 
+      // and we aren't near the player's starting spot (0,0)
+      if (spawnedNodes < nodesToSpawn && Math.random() > 0.985 && (Math.abs(q) > 3 || Math.abs(r) > 3)) {
+        type = "sentinel_node";
+        spawnedNodes++;
+      }
+
+      // We add 'type' to the column object here
+      const col={q,r,x,z,h,type};
+      world.cols.push(col);
+      world.map.set(key(q,r),col);
+
+      if(!world.sentinel || col.h > world.sentinel.h){
+        world.sentinel = col;
+        const levelHealth = 200 + (currentLevel * 50);
+        world.sentinel.health = levelHealth;    
+        world.sentinel.maxHealth = levelHealth;
+      }
+    }
+  }
+}
+
+genWorld(Math.random().toString());
+
+// Fast height query from world coords using axial rounding + map lookup.
+// Falls back to baseY if outside.
+function heightAtWorld(x,z){
+  const ar = axialFromWorld(x,z,world.hexSize);
+  const hr = axialRound(ar.q, ar.r);
+  const c = world.map.get(key(hr.q, hr.r));
+  return c ? c.h : (world.baseY - 50);
+}
+
+// ============================================================
+// Player & Camera (Over-the-Shoulder)
+// ============================================================
+
+const player = { x: 0, y: 0, z: -100, yaw: 0, q: 0, r: 0, targetYaw: 0 };
+//const cam = { x: 0, y: 0, z: 0, yaw: 0, pitch: -0.4, fov: 1 };
+// We initialize x, y, z to match the player so it doesn't "fly in" from 0,0,0 on start
+const cam = { x: 0, y: 0, z: -100, yaw: 0, pitch: -0.4, fov: 1 };
+
+const keys=new Set();
+addEventListener("keydown",e=>keys.add(e.key.toLowerCase()));
+addEventListener("keyup",e=>keys.delete(e.key.toLowerCase()));
+
+function sampleHeightSlow(x,z){
+  let best=0,bd=1e9;
+  for(const c of world.cols){
+    const d=(c.x-x)**2+(c.z-z)**2;
+    if(d<bd){bd=d;best=c.h;}
+  }
+  return best;
+}
+
+function step(dt){
+  const speed = 75 * dt;
+
+  // 1. Handle Continuous Rotation (A and D keys)
+  const deg60 = 60 * (Math.PI / 180); 
+
+  if (keys.has('a')) {
+    player.targetYaw -= deg60; // Rotate Left
+    keys.delete('a');
+  }
+  if (keys.has('d')) {
+    player.targetYaw += deg60; // Rotate Right
+    keys.delete('d');
+  }
+
+  // Smoothly rotate the player's actual yaw toward the targetYaw
+  player.yaw += (player.targetYaw - player.yaw) * 0.2;
+
+  // 2. Handle Forward Movement (W key)
+  if (keys.has('w')) {
+    // Calculate which hex direction aligns with our current rotation
+    // The +2 offset here is what determines "Forward" relative to the camera
+    const currentDirIndex = (Math.round(player.targetYaw / deg60) % 6 + 6) % 6;
+    
+   // ADJUSTED: Changed the offset to 5 to flip the direction AWAY from the screen
+    const movementIndex = (currentDirIndex + 5) % 6; 
+    
+    const [dq, dr] = HEX_DIRS[movementIndex];
+    const targetQ = player.q + dq;
+    const targetR = player.r + dr;
+    const targetKey = key(targetQ, targetR);
+    const targetCol = world.map.get(targetKey);
+
+    if (targetCol) {
+      // 1. Move the player
+      player.q = targetQ;
+      player.r = targetR;
+      player.x = targetCol.x;
+      player.z = targetCol.z;
+      
+      const targetKey = key(targetQ, targetR); // Ensure targetKey is defined
+
+      // 2. THE RULE ENFORCER: 
+      // Added "!world.spent.has(targetKey)" to ensure we only trigger UNFINISHED spires.
+      if (targetCol.type === "sentinel_node" && !world.spent.has(targetKey)) {
+          // It's an ACTIVE Spire!
+          if (!isPaused) {
+              if (HexAudio.isStarted) HexAudio.playCoinChime();
+              isPaused = true;
+              hex21.init();
+              hex21.nodeQ = targetQ; 
+              hex21.nodeR = targetR;
+              document.getElementById('node-popup').style.display = 'block';
+              document.exitPointerLock();
+          }
+      } else {
+          // This branch now handles BOTH normal terrain AND "Dead" Spires.
+          // We add a second check so "Dead" Spires don't accidentally become ammo.
+          if (targetCol.type !== "sentinel_node") {
+              if (!world.visited.has(targetKey) && !world.spent.has(targetKey)) {
+                  world.visited.add(targetKey);
+                  if (HexAudio.isStarted) HexAudio.playCapture();
+              }
+          }
+      }
+    }
+    keys.delete('w');
+  }
+
+// --- FIRE HEX STREAM (Space Bar) ---
+  const spaceIsDown = keys.has(" ");
+  
+  if(spaceIsDown && !spaceWasDown && (world.shieldsActive || 0) === 0 && world.visited.size > 0 && world.sentinel){
+    
+    // 1. Audit the ammo: Only spend normal tiles, NOT Spires
+    let validAmmoCount = 0;
+    world.visited.forEach(k => {
+      const hexData = world.map.get(k);
+      
+      if (hexData && hexData.type === "sentinel_node") {
+        // DO NOTHING to the Spire.
+      } else {
+        // This is normal ammo: Move it to spent (Black)
+        world.spent.add(k);
+        validAmmoCount++;
+      }
+    });
+
+    // 2. Only fire if we actually spent normal tiles
+    if (validAmmoCount > 0) {
+      const ammo = validAmmoCount;
+      const dx = world.sentinel.x - player.x;
+      const dy = (world.sentinel.h + 15) - (player.y + 3);
+      const dz = world.sentinel.z - player.z;
+      const dist = Math.hypot(dx, dy, dz);
+      
+      const shotVelocity = 350; 
+      const shotLife = 4.0;     
+      
+      for(let i = 0; i < ammo; i++){
+        hexProjectiles.push({
+          x: player.x, y: player.y + 3, z: player.z,
+          vx: (dx / dist) * shotVelocity,
+          vy: (dy / dist) * shotVelocity,
+          vz: (dz / dist) * shotVelocity,
+          delay: i * 0.02,
+          life: shotLife
+        });
+      }
+    }
+
+    // 3. Clear only the tiles that weren't protected Spires
+    world.visited.forEach(k => {
+       const hexData = world.map.get(k);
+       if (hexData && hexData.type !== "sentinel_node") {
+         world.visited.delete(k);
+       }
+    });
+  } 
+  // ADDED: Simple check to show HTML if shields are still up
+  else if (spaceIsDown && !spaceWasDown && (world.shieldsActive || 0) > 0) {
+    const el = document.getElementById('shield-alert');
+    if(el) {
+      el.style.display = 'block';
+      setTimeout(() => { el.style.display = 'none'; }, 1000);
+    }
+  }
+
+  spaceWasDown = spaceIsDown;
+
+  // Snap Player to Hex Top using your heightAtWorld function
+  const targetH = heightAtWorld(player.x, player.z);
+  player.y += (targetH - player.y) * 0.2;
+
+//===
+//QBERT BLOCK
+const ar = axialFromWorld(player.x, player.z, world.hexSize);
+const hr = axialRound(ar.q, ar.r);
+const k = key(hr.q, hr.r); 
+
+const col = world.map.get(k);
+
+// Locate where you check the hex under the player:
+if (col && !world.spent.has(k)) {
+  if (col.type === "sentinel_node") {
+    if (!isPaused) {
+      if (HexAudio.isStarted) HexAudio.playCoinChime();
+      isPaused = true;
+      hex21.init();
+      hex21.nodeQ = col.q; 
+      hex21.nodeR = col.r;
+      document.getElementById('node-popup').style.display = 'block';
+      document.exitPointerLock();
+    }
+    // NOTICE: We do NOT add the Spire to world.visited here.
+    // We keep it "clean" so it can't be deleted by a loss.
+  } 
+  else if (!world.visited.has(k)) {
+    // Normal hex capture
+    world.visited.add(k);
+    if (HexAudio.isStarted) HexAudio.playCapture();
+  }
+}
+
+  // ------------------------------------------
+
+// --- SM64-Style Chaser Camera Logic with Collision ---
+  const camDist = 50;
+  const camHeight = 22;
+  const terrainMargin = 4; // Height above ground to stay at
+  
+  // 1. Calculate the IDEAL position (where the camera wants to be)
+  let targetCamX = player.x - Math.sin(player.yaw) * camDist;
+  let targetCamZ = player.z - Math.cos(player.yaw) * camDist;
+  let targetCamY = player.y + camHeight;
+
+// --- ADDED: Camera Shake when Locked ---
+  if (sentinelLock) {
+    targetCamX += (Math.random() - 0.5) * 4;
+    targetCamY += (Math.random() - 0.5) * 4;
+    targetCamZ += (Math.random() - 0.5) * 4;
+  }
+
+  // --- COLLISION CHECK ---
+  // Check the terrain height at the camera's intended location
+  const groundAtCam = heightAtWorld(targetCamX, targetCamZ);
+  
+  // If the target position is inside a mountain, push the camera UP 
+  // so it sits on the surface of that mountain.
+  if (targetCamY < groundAtCam + terrainMargin) {
+      targetCamY = groundAtCam + terrainMargin;
+  }
+
+  // 2. POSITION WEIGHT (Elastic follow)
+  const posWeight = 0.03; 
+  cam.x += (targetCamX - cam.x) * posWeight;
+  cam.z += (targetCamZ - cam.z) * posWeight;
+  cam.y += (targetCamY - cam.y) * posWeight;
+
+  // 3. ROTATION WEIGHT
+  const rotWeight = 0.06;
+  cam.yaw += (player.yaw - cam.yaw) * rotWeight;
+}
+
+// ============================================================
+// Projection
+// ============================================================
+
+function project(p){
+  const dx=p.x-cam.x;
+  const dy=p.y-cam.y;
+  const dz=p.z-cam.z;
+
+  const cy=Math.cos(cam.yaw), sy=Math.sin(cam.yaw);
+  const cp=Math.cos(cam.pitch), sp=Math.sin(cam.pitch);
+
+  const xz=dx*cy-dz*sy;
+  const zz=dx*sy+dz*cy;
+  const yz=dy*cp-zz*sp;
+  const zz2=dy*sp+zz*cp;
+  if(zz2<=0.1) return null;
+
+  const f=(Math.min(W,H)*0.5)/Math.tan(cam.fov*0.5);
+
+  return{
+    x:(xz*f)/zz2+W/2,
+    y:H/2-(yz*f)/zz2,
+    z:zz2
+  };
+}
+
+function getPlayerFaces(){
+  // 1. Calculate Warp/Pulse factor
+  // While locked, the cube pulses in size and squishes slightly
+  let warp = 1.0;
+  if (sentinelLock) {
+    warp = 1.0 + Math.sin(performance.now() * 0.02) * 0.2;
+  }
+
+  const size = 3 * warp;
+  const h = 6 * (sentinelLock ? (1.0 / warp) : 1.0); // Squish height as width grows
+  const corners = [];
+
+  // 2. Calculate 3D points with Jitter
+  for(let i=0; i<8; i++){
+    const sx = (i & 1) ? size : -size;
+    const sy = (i & 2) ? h : 0;
+    const sz = (i & 4) ? size : -size;
+
+    // Add high-frequency "fizzing" jitter to individual vertices when locked
+    const jitterX = sentinelLock ? (Math.random() - 0.5) * 2.0 : 0;
+    const jitterY = sentinelLock ? (Math.random() - 0.5) * 2.0 : 0;
+    const jitterZ = sentinelLock ? (Math.random() - 0.5) * 2.0 : 0;
+
+    const rx = (sx + jitterX) * Math.cos(player.yaw) - (sz + jitterZ) * Math.sin(player.yaw);
+    const rz = (sx + jitterX) * Math.sin(player.yaw) + (sz + jitterZ) * Math.cos(player.yaw);
+    
+    corners.push(project({
+      x: player.x + rx, 
+      y: player.y + sy + jitterY, 
+      z: player.z + rz
+    }));
+  }
+
+  if(corners.some(p => !p)) return [];
+
+  const faceDefs = [
+    { idx: [0, 1, 3, 2], color: "#cc0000" }, // Bottom
+    { idx: [4, 5, 7, 6], color: "#ff4444" }, // Top
+    { idx: [0, 1, 5, 4], color: "#e60000" }, // Side 1
+    { idx: [2, 3, 7, 6], color: "#e60000" }, // Side 2
+    { idx: [0, 2, 6, 4], color: "#b30000" }, // Side 3
+    { idx: [1, 3, 7, 5], color: "#b30000" }  // Side 4
+  ];
+
+  return faceDefs.map(f => {
+    const pts = f.idx.map(i => corners[i]);
+    const depth = pts.reduce((acc, p) => acc + p.z, 0) / 4;
+    return { type: "player", pts, depth, color: f.color };
+  });
+}
+//====
+//Projectile Arrray
+//=====
+let hexProjectiles = [];
+
+// ============================================================
+// Sentinel runtime state (rotation + detection)
+// ============================================================
+
+let sentinelAngle = 0;
+let playerDetected = false;
+let gameOver = false; //
+
+// --- NEW SENTINEL STATE ---
+let sentinelLock = false; // Tracks if the beam is currently locked on the player
+let drainTimer = 0;       // Accumulates time to handle the 1-second drain interval
+
+// ============================================================
+// Sentinel (I, Robot style) — body
+// ============================================================
+
+function drawSentinelBody(){
+
+  const s = world.sentinel;
+  if(!s) return;
+
+  const baseSize = world.hexSize * 0.6;
+
+  const levels = [
+    {h: s.h + 4,  r: 1.0},
+    {h: s.h + 14, r: 0.75},
+    {h: s.h + 24, r: 0.45}
+  ];
+
+  const faces = [];
+
+  for(let L=0; L<levels.length-1; L++){
+
+    const a = levels[L];
+    const b = levels[L+1];
+
+    const topA = hexCorners(s.x, a.h, s.z, baseSize * a.r);
+    const topB = hexCorners(s.x, b.h, s.z, baseSize * b.r);
+
+    for(let i=0;i<6;i++){
+
+      const quad = [
+        topA[i],
+        topA[(i+1)%6],
+        topB[(i+1)%6],
+        topB[i]
+      ].map(project);
+
+      if(quad.some(p=>!p)) continue;
+
+      const depth = (quad[0].z + quad[2].z) * 0.5;
+      faces.push({pts:quad, depth});
+    }
+  }
+
+  faces.sort((a,b)=>b.depth-a.depth);
+
+  for(const f of faces){
+
+    ctx.fillStyle = "rgba(0,90,0,0.95)";
+
+    ctx.beginPath();
+    ctx.moveTo(f.pts[0].x,f.pts[0].y);
+    for(let i=1;i<f.pts.length;i++) ctx.lineTo(f.pts[i].x,f.pts[i].y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(160,255,160,1)";
+    ctx.stroke();
+  }
+}
+
+function drawSentinelHead(){
+
+  const s = world.sentinel;
+  if(!s) return;
+
+  const head = project({x:s.x, y:s.h + 28, z:s.z});
+  if(!head) return;
+
+  // head ring sweep (rotating)
+  ctx.strokeStyle = "rgba(180,255,180,0.9)";
+  ctx.beginPath();
+  ctx.arc(head.x, head.y, 10*DPR, sentinelAngle, sentinelAngle + Math.PI*1.5);
+  ctx.stroke();
+
+  // eye
+  ctx.fillStyle = "#aaffaa";
+  ctx.beginPath();
+  ctx.arc(head.x, head.y, 3*DPR, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function drawSentinel(){
+  drawSentinelBody();
+  drawSentinelHead();
+}
+
+// ============================================================
+// Sentinel rotation & target update
+// ============================================================
+
+let sentinelTargetHex = null; // New global: The Source of Truth
+
+// Replace your existing updateSentinel function with this
+function updateSentinel(dt) {
+  sentinelAngle += dt * 0.6;
+  
+  // SYNC: We calculate the scan vector once
+  const dx = Math.sin(sentinelAngle);
+  const dz = Math.cos(sentinelAngle);
+  
+  sentinelTargetHex = null;
+  sentinelHitPlayer = false; 
+
+  const pAr = axialFromWorld(player.x, player.z, world.hexSize);
+  const pHr = axialRound(pAr.q, pAr.r);
+  const playerKey = key(pHr.q, pHr.r);
+
+  // We scan out far enough to hit the edge of the world
+  for (let dist = 0; dist <= 60; dist++) {
+    const tQ = world.sentinel.q + dx * dist;
+    const tR = world.sentinel.r + dz * dist;
+    const rounded = axialRound(tQ, tR);
+    const currentKey = key(rounded.q, rounded.r);
+    const found = world.map.get(currentKey);
+    
+    if (found) {
+      sentinelTargetHex = found; 
+      if (currentKey === playerKey) sentinelHitPlayer = true;
+    }
+  }
+}
+
+// ============================================================
+// Beam terrain occlusion + player detection LOS occlusion
+// ============================================================
+
+function marchOcclusion(sx,sy,sz, ex,ey,ez, stepLen){
+  // returns {hit:boolean, hx,hy,hz, tHit}
+  const dx = ex - sx;
+  const dy = ey - sy;
+  const dz = ez - sz;
+  const len = Math.hypot(dx,dz);
+  if(len < 0.001) return {hit:false, hx:ex, hy:ey, hz:ez, tHit:1};
+
+  const steps = Math.max(1, Math.floor(len / stepLen));
+  for(let i=1;i<=steps;i++){
+    const t = i / steps;
+    const x = sx + dx * t;
+    const z = sz + dz * t;
+    const yLine = sy + dy * t;
+
+    const h = heightAtWorld(x,z);
+
+    // If terrain is above the line-of-sight (with small margin), it's blocked
+    if(h > yLine - 1.0){
+      return {hit:true, hx:x, hy:yLine, hz:z, tHit:t};
+    }
+  }
+  return {hit:false, hx:ex, hy:ey, hz:ez, tHit:1};
+}
+
+// Add this variable at the very top of your script to keep movement silky
+let smoothedTargetPos = {x: 0, y: 0, z: 0};
+
+function drawSentinelBeam(dt){
+  const s = world.sentinel;
+  if(!s) return;
+
+  const sx = s.x;
+  const sy = s.h + 26;
+  const sz = s.z;
+
+  // 1. LOCK & DRAIN LOGIC
+  const los = marchOcclusion(sx, sy, sz, player.x, player.y + 4, player.z, world.hexSize * 0.6);
+  const playerInSight = !los.hit;
+  
+  // Replace the "1. LOCK & DRAIN LOGIC" section inside drawSentinelBeam:
+  if (playerInSight && (sentinelHitPlayer || sentinelLock)) {
+    sentinelLock = true;
+    playerDetected = true;
+    drainTimer += (dt || 0.016) * (sentinelLock ? 2.0 : 1.0);
+    
+    if (drainTimer >= 1.0) {
+      // 1. Convert to array so we can find a valid target
+      let items = Array.from(world.visited);
+      let targetKey = null;
+
+      // 2. Look for the first thing that ISN'T a spire
+      for (let k of items) {
+        const hex = world.map.get(k);
+        if (hex && hex.type !== "sentinel_node") {
+          targetKey = k;
+          break; // Found one!
+        }
+      }
+
+      if (targetKey) {
+        // Drain actual ammo
+        world.spent.add(targetKey); 
+        world.visited.delete(targetKey);
+      } else {
+        // No VALID ammo left (or only protected Spires left)? 
+        // Start dealing permanent damage
+        playerDamage++;
+        if (playerDamage >= 10) {
+          gameLost = true;
+        }
+      }
+      drainTimer = 0;
+    }
+  } else {
+    sentinelLock = false;
+    playerDetected = false;
+    drainTimer = 0;
+  }
+
+  // 2. TARGETING SYNC (Fixing the "Reversed" and "Off-Position" issues)
+  let idealTarget;
+  if (sentinelLock) {
+    idealTarget = {x: player.x, y: player.y + 4, z: player.z};
+  } else if (sentinelTargetHex) {
+    // If the radar has a hit, the 3D beam points directly at that hex center
+    idealTarget = {x: sentinelTargetHex.x, y: sentinelTargetHex.h, z: sentinelTargetHex.z};
+  } else {
+    // FALLBACK: Use the same trig as updateSentinel but flip sin to match 3D rotation
+    const dx = Math.sin(sentinelAngle); 
+    const dz = Math.cos(sentinelAngle);
+    // Project far enough to look like a horizon beam
+    idealTarget = {x: sx + dx * 600, y: sy - 40, z: sz + dz * 600};
+  }
+
+  // 3. SILKY SMOOTHING
+  // This removes the jumping between hex centers while keeping them sequenced
+  const lerpFactor = sentinelLock ? 0.4 : 0.12; 
+  smoothedTargetPos.x += (idealTarget.x - smoothedTargetPos.x) * lerpFactor;
+  smoothedTargetPos.y += (idealTarget.y - smoothedTargetPos.y) * lerpFactor;
+  smoothedTargetPos.z += (idealTarget.z - smoothedTargetPos.z) * lerpFactor;
+
+  const p0 = project({x:sx, y:sy, z:sz});
+  const p1 = project(smoothedTargetPos);
+  
+  if(!p0 || !p1) return;
+
+  // 4. VISUALS (Filaments + Spark Particles)
+  const time = performance.now() * 0.005; 
+  const isLocked = sentinelLock;
+  const hue = isLocked ? 0 : 140; 
+
+  function drawFilament(start, end, amp, freq, off, col, wid) {
+    ctx.beginPath();
+    ctx.strokeStyle = col;
+    ctx.lineWidth = wid * DPR;
+    ctx.moveTo(start.x, start.y);
+    for (let i = 1; i <= 6; i++) {
+      const t = i / 6;
+      let lx = start.x + (end.x - start.x) * t;
+      let ly = start.y + (end.y - start.y) * t;
+      const angle = Math.atan2(end.y - start.y, end.x - start.x) + Math.PI / 2;
+      const wave = Math.sin(t * freq + off + time * 5) * amp * (1 - Math.abs(t - 0.5) * 2);
+      ctx.lineTo(lx + Math.cos(angle) * wave, ly + Math.sin(angle) * wave);
+    }
+    ctx.stroke();
+  }
+
+  // Draw Glow
+  ctx.shadowBlur = isLocked ? 15 * DPR : 5 * DPR;
+  ctx.shadowColor = `hsla(${hue}, 100%, 50%, 0.5)`;
+  drawFilament(p0, p1, 0, 0, 0, `hsla(${hue}, 100%, 50%, 0.15)`, isLocked ? 15 : 8);
+  ctx.shadowBlur = 0;
+  
+  const amp = isLocked ? 12 : 5; 
+  drawFilament(p0, p1, amp, 6, 0, `hsla(${hue}, 100%, 70%, 0.6)`, 2);
+  drawFilament(p0, p1, amp, 6, Math.PI * 0.66, `hsla(${hue + 20}, 100%, 75%, 0.6)`, 2);
+  drawFilament(p0, p1, amp, 6, Math.PI * 1.33, `hsla(${hue - 20}, 100%, 65%, 0.6)`, 2);
+
+  // Impact Sparks
+  if (isLocked) {
+    for(let i = 0; i < 8; i++) {
+      const r = (Math.random() * 20) * DPR;
+      const ang = Math.random() * Math.PI * 2;
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(p1.x + Math.cos(ang) * r, p1.y + Math.sin(ang) * r, (Math.random() * 3) * DPR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+window.updateHUD = function() {
+  const hud = document.getElementById("hud");
+  if (!hud) return;
+
+  // 1. Line 1: Status / Controls (PRESERVED)
+  let line1 = playerDetected 
+    ? "<span class='alert'>⚠ SENTINEL WATCHING YOU ⚠</span>" 
+    : "WASD move • Mouse look";
+
+  // 2. Line 2: Gameplay Stats (PRESERVED)
+  const ammoCount = world.visited.size - world.spent.size; 
+  const sCount = world.shieldsActive || 0;
+  const shieldText = sCount > 0 
+    ? ` | <span class="alert">SHIELDS: ${sCount}</span>` 
+    : ` | <span style="color:#fff">SHIELDS OFFLINE</span>`;
+
+  const stats = `<br>AMMO: ${ammoCount} | HP: ${player.hp} | BOSS: ${world.sentinel ? world.sentinel.health : 0}${shieldText}`;
+
+  // 3. Line 3: Multi-Archive Text (EXTENDED)
+  const logosLine = `<br><span style="color: #cc88ff;">LOGOS: ${world.logosPercent || 0}%</span>`;
+  const biosLine = ` | <span style="color: #00ff88;">BIOS: ${world.biosPercent || 0}%</span>`;
+  const chronosLine = ` | <span style="color: #ffcc00;">CHRONOS: ${world.chronosPercent || 0}%</span>`;
+  const techLine = ` | <span style="color: #00ccff;">TECH: ${world.techPercent || 0}%</span>`;
+  const ethosLine = ` | <span style="color: #ff4444;">ETHOS: ${world.ethosPercent || 0}%</span>`;
+
+  // Update the text container (PRESERVED ORDER)
+  hud.innerHTML = line1 + stats + logosLine + biosLine + chronosLine + techLine + ethosLine;
+
+  // 4. Shared Helper for Area-Corrected Fills (PRESERVED MATH)
+  function setHexFill(id, percent) {
+    const fillElement = document.getElementById(id);
+    if (!fillElement) return;
+
+    const totalH = 115;
+    const p = (percent || 0) / 100;
+    let h;
+
+    if (p <= 0) {
+      h = 0;
+    } else if (p < 0.166) {
+      h = Math.sqrt(p / 0.166) * (totalH * 0.25);
+    } else if (p < 0.833) {
+      h = (totalH * 0.25) + ((p - 0.166) / 0.667) * (totalH * 0.5);
+    } else if (p < 1) {
+      h = (totalH * 0.75) + (1 - Math.sqrt((1 - p) / 0.166)) * (totalH * 0.25);
+    } else {
+      h = totalH;
+    }
+
+    fillElement.setAttribute('height', h);
+    fillElement.setAttribute('y', totalH - h);
+    fillElement.style.transform = ""; 
+  }
+
+  // 5. Update ALL five visual buckets (EXTENDED)
+  setHexFill('fill-LOGOS', world.logosPercent);
+  setHexFill('fill-BIOS', world.biosPercent);
+  setHexFill('fill-CHRONOS', world.chronosPercent);
+  setHexFill('fill-TECH', world.techPercent);
+  setHexFill('fill-ETHOS', world.ethosPercent);
+};
+
+function drawMiniMap() {
+  const scale = 3 * DPR; // Size of each hex on the map
+  const pad = 20 * DPR;  // Offset from top-left corner
+  const mapR = world.radius;
+
+  world.cols.forEach(col => {
+    // Convert axial q,r to a 2D top-down position
+    const mx = pad + (col.q + mapR) * scale * 1.5;
+    const my = pad + (col.r + mapR + col.q/2) * scale * 1.7;
+
+    const k = key(col.q, col.r);
+    
+    // --- UPDATED COLOR LOGIC ---
+    // 1. Check for Sentinel Node first (Priority Orange)
+    // 1. ACTIVE ORANGE SPIRE (Priority)
+    if (col.type === "sentinel_node" && !world.spent.has(k)) {
+      ctx.fillStyle = "#ff8800"; 
+    } 
+    // 2. RED TILES (Now includes won/captured Spires)
+    // We check this BEFORE 'spent' so that a won node shows as Red
+    else if (world.visited.has(k)) {
+      ctx.fillStyle = "rgba(255, 0, 0, 0.8)"; 
+    } 
+    // 3. BLACK TILES (Spent ammo)
+    else if (world.spent.has(k)) {
+      ctx.fillStyle = "#000000"; 
+    } 
+    // 4. DEFAULT GREEN
+    else {
+      ctx.fillStyle = "rgba(0, 60, 0, 0.8)"; 
+    }
+    
+    ctx.beginPath();
+    ctx.arc(mx, my, scale * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // --- Draw Player Marker ---
+  const pAr = axialFromWorld(player.x, player.z, world.hexSize);
+  const pHr = axialRound(pAr.q, pAr.r);
+  const pmx = pad + (pHr.q + mapR) * scale * 1.5;
+  const pmy = pad + (pHr.r + mapR + pHr.q/2) * scale * 1.7;
+
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(pmx, pmy, scale * 1.2, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // --- Draw Sentinel Marker ---
+  if (world.sentinel) {
+    const smx = pad + (world.sentinel.q + mapR) * scale * 1.5;
+    const smy = pad + (world.sentinel.r + mapR + world.sentinel.q/2) * scale * 1.7;
+    const isLocked = (typeof sentinelLock !== 'undefined') && sentinelLock;
+    
+    if (sentinelTargetHex) {
+      const beamColor = isLocked ? "rgba(255, 0, 0, 0.5)" : "rgba(0, 255, 0, 0.4)";
+      const steps = 18; 
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const testQ = world.sentinel.q + (sentinelTargetHex.q - world.sentinel.q) * t;
+        const testR = world.sentinel.r + (sentinelTargetHex.r - world.sentinel.r) * t;
+        const snap = axialRound(testQ, testR);
+        const hmx = pad + (snap.q + mapR) * scale * 1.5;
+        const hmy = pad + (snap.r + mapR + snap.q/2) * scale * 1.7;
+        ctx.fillStyle = beamColor;
+        ctx.beginPath();
+        ctx.arc(hmx, hmy, scale * 1.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.fillStyle = "#ffff00";
+    ctx.beginPath();
+    ctx.arc(smx, smy, scale * 1.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 0.5 * DPR;
+    ctx.stroke();
+  }
+
+  // --- Progress Dashboard ---
+  const total = world.cols.length;
+  const painted = world.visited.size;
+  const percent = ((painted / total) * 100).toFixed(1);
+  const dashboardX = pad + (world.radius * 2 + 5) * scale * 1.5;
+  const dashboardY = pad + 65 * DPR;
+
+  ctx.font = `${14 * DPR}px monospace`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillStyle = "rgba(0, 40, 0, 0.6)";
+  ctx.fillRect(dashboardX - 10, dashboardY - 10, 180 * DPR, 75 * DPR);
+
+  ctx.fillStyle = "#9f9";
+  ctx.fillText(`TOTAL HEXES: ${total}`, dashboardX, dashboardY);
+  
+  if (painted > 0) {
+    ctx.fillStyle = "#ff4444";
+    ctx.fillText(`PAINTED    : ${painted}`, dashboardX, dashboardY + 20 * DPR);
+  } else {
+    const integrity = 10 - playerDamage;
+    const isCritical = integrity < 4;
+    const flash = isCritical && (Math.sin(performance.now() * 0.01) > 0);
+    ctx.fillStyle = flash ? "#fff" : "#ff0000";
+    ctx.fillText(`INTEGRITY  : ${integrity}/10`, dashboardX, dashboardY + 20 * DPR);
+    if (isCritical) {
+        ctx.font = `${10 * DPR}px monospace`;
+        ctx.fillText("!! CRITICAL DRAIN !!", dashboardX, dashboardY + 58 * DPR);
+        ctx.font = `${14 * DPR}px monospace`;
+    }
+  }
+  
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(`PROGRESS   : ${percent}%`, dashboardX, dashboardY + 40 * DPR);
+  ctx.fillStyle = "#ffff00";
+  ctx.fillText(`SECTOR     : ${currentLevel}`, dashboardX, dashboardY - 20 * DPR);
+
+  // --- Sentinel Boss Health HUD ---
+  if (world.sentinel && world.sentinel.health !== undefined) {
+    const barX = dashboardX + 180 * DPR; 
+    const barY = dashboardY - 10 * DPR;
+    const barW = 220 * DPR;
+    const barH = 65 * DPR;
+    ctx.fillStyle = "rgba(40, 0, 0, 0.7)";
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.fillStyle = "#ff8080";
+    ctx.font = `bold ${11 * DPR}px monospace`;
+    ctx.fillText("SENTINEL INTEGRITY", barX + 10 * DPR, barY + 10 * DPR);
+    const innerX = barX + 10 * DPR;
+    const innerY = barY + 28 * DPR;
+    const innerW = barW - 20 * DPR;
+    const innerH = 20 * DPR;
+    ctx.fillStyle = "#300"; 
+    ctx.fillRect(innerX, innerY, innerW, innerH);
+    const healthPercent = Math.max(0, world.sentinel.health / world.sentinel.maxHealth);
+    ctx.fillStyle = "#f00";
+    ctx.fillRect(innerX, innerY, innerW * healthPercent, innerH);
+    ctx.fillStyle = "#fff";
+    ctx.font = `${12 * DPR}px monospace`;
+    ctx.textAlign = "center";
+    ctx.fillText(`${Math.ceil(world.sentinel.health)} / ${world.sentinel.maxHealth}`, innerX + innerW/2, innerY + 4 * DPR);
+    ctx.textAlign = "left";
+  }
+}
+
+function updateProjectiles(dt) {
+  for (let i = hexProjectiles.length - 1; i >= 0; i--) {
+    const p = hexProjectiles[i];
+    if (p.delay > 0) { p.delay -= dt; continue; }
+
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.z += p.vz * dt;
+    p.life -= dt;
+
+    const ground = heightAtWorld(p.x, p.z);
+    if (p.y < ground) { hexProjectiles.splice(i, 1); continue; }
+
+    const distToBoss = Math.hypot(p.x - world.sentinel.x, p.y - (world.sentinel.h + 15), p.z - world.sentinel.z);
+    
+    // ADDED: !gameOver check ensures we only trigger the win once
+    if (distToBoss < 10 && !gameOver) { 
+      world.sentinel.health = Math.max(0, world.sentinel.health - 1);
+      
+      // NEW: Flag this projectile so HexAudio sees the hit
+        p.isHit = true;
+
+      if (world.sentinel.health <= 0) {
+        gameOver = true; // Stop the game loop and show the screen
+        
+        // Clear all remaining projectiles so they don't hit the "next" boss instantly
+        hexProjectiles = []; 
+        
+        setTimeout(() => {
+          gameOver = false; 
+          startNextLevel();
+        }, 3000); 
+      }
+
+      hexProjectiles.splice(i, 1);
+      continue;
+    }
+
+    if (p.life <= 0) hexProjectiles.splice(i, 1);
+  }
+}
+
+function launchPaintNova(startQ, startR, power) {
+  let queue = [{q: startQ, r: startR, d: 0}];
+  let processed = new Set();
+  processed.add(key(startQ, startR));
+
+  let interval = setInterval(() => {
+    if (queue.length === 0 || power <= 0) {
+      clearInterval(interval);
+      return;
+    }
+
+    let levelSize = queue.length;
+    for (let i = 0; i < levelSize; i++) {
+      let current = queue.shift();
+      const k = key(current.q, current.r);
+      
+      // Paint the tile
+      if (world.map.has(k)) {
+        world.visited.add(k);
+      }
+
+      // Add neighbors for next ring
+      HEX_DIRS.forEach(([dq, dr]) => {
+        let nQ = current.q + dq;
+        let nR = current.r + dr;
+        let nK = key(nQ, nR);
+        if (world.map.has(nK) && !processed.has(nK)) {
+          processed.add(nK);
+          queue.push({q: nQ, r: nR, d: current.d + 1});
+        }
+      });
+    }
+    power--;
+    if (HexAudio.isStarted) HexAudio.playCapture(); // Subtle sound for each ring
+  }, 100); // Expanding rings every 100ms
+}
+
+function startNextLevel() {
+  currentLevel++;
+  playerDamage = 0;
+  
+  // 1. DATA FLUSH: Completely wipe the old level's geometry.
+  // This clears the lookup table the Mini-Map uses to find Spires.
+  world.map.clear(); 
+  // This clears the physical 3D columns.
+  world.cols = []; 
+  // This clears the "Captured" status so new spires aren't born "already red."
+  world.spent.clear(); 
+
+  // 2. AMMO SANITIZER: Stop the "Red Dots" from ghosting.
+  // We keep the ammo COUNT, but clear the coordinates from Level 1.
+  const ammoToKeep = world.visited.size;
+  world.visited.clear();
+
+  // 3. GENERATE NEW TERRAIN: Populate world.map with Level 2 data.
+  genWorld(Math.random().toString());
+
+  // 4. AMMO REDISTRIBUTION:
+  // Now that the new map exists, we put your ammo back into it.
+  // This moves your "Red Dots" to valid terrain on the new map.
+  let redistributed = 0;
+  for (let [k, hex] of world.map) {
+    if (redistributed >= ammoToKeep) break;
+    if (hex.type !== "sentinel_node") {
+      world.visited.add(k);
+      redistributed++;
+    }
+  }
+
+  // 5. REPOSITION PLAYER: Safely on the NEW terrain.
+  player.x = 0; 
+  player.z = -100;
+  // This now checks the height of the NEWLY generated ground.
+  player.y = heightAtWorld(0, -100) + 5;
+
+  // 6. UI REFRESH: Update the Level Number and Shield Count on screen.
+  if (typeof updateHUD === 'function') updateHUD();
+}
+
+function drawWinScreen() {
+  ctx.fillStyle = "rgba(0, 40, 0, 0.85)";
+  ctx.fillRect(0, 0, W, H);
+  
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#9f9";
+  ctx.font = `${40 * DPR}px monospace`;
+  ctx.fillText("SECTOR PURIFIED", W / 2, H / 2 - 20 * DPR);
+
+  ctx.fillStyle = "#fff";
+  ctx.font = `${18 * DPR}px monospace`;
+  // Show a "loading" style message for the next level
+  ctx.fillText(`PREPARING NEXT SECTOR...`, W / 2, H / 2 + 30 * DPR);
+}
+
+// Add this function after drawWinScreen:
+function drawLoseScreen() {
+  ctx.fillStyle = "rgba(40, 0, 0, 0.85)";
+  ctx.fillRect(0, 0, W, H);
+  
+  ctx.fillStyle = "#ff4444";
+  ctx.textAlign = "center";
+  ctx.font = `${60 * DPR}px monospace`;
+  ctx.fillText("TERMINATED", W / 2, H / 2);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `${20 * DPR}px monospace`;
+  ctx.fillText("Sentinel Drained Your Core Integrity", W / 2, H / 2 + 40 * DPR);
+
+  ctx.fillStyle = "#ff8888";
+  ctx.font = `${24 * DPR}px monospace`;
+  ctx.fillText("[ CLICK TO RESTART ]", W / 2, H / 2 + 90 * DPR);
+}
+
+// SINGLE UNIFIED CLICK HANDLER
+canvas.onclick = () => {
+  if (typeof HexAudio !== 'undefined') {
+    HexAudio.init();
+  }
+
+  const overlay = document.getElementById('instr-overlay');
+  if (overlay && overlay.style.display === 'block') return;
+
+  // --- REVISED LOGIC ---
+  if (gameLost) {
+    // Only reload on a LOSS to restart from Level 1
+    location.reload(); 
+    return;
+  }
+
+  if (gameOver) {
+    // On a WIN, do nothing. 
+    // The setTimeout in updateProjectiles will handle the level transition.
+    return;
+  }
+  // ---------------------
+
+  if (document.pointerLockElement !== canvas) {
+    canvas.requestPointerLock();
+  }
+};
+// ============================================================
+// Render with proper occlusion (terrain)
+// ============================================================
+
+function render(dt){
+  if (gameOver) { drawWinScreen(); return; }
+  if (gameLost) { drawLoseScreen(); return; }
+
+  // --- Calculate Next Hex for Glowing Effect ---
+  const deg60 = 60 * (Math.PI / 180);
+  const currentDirIndex = (Math.round(player.targetYaw / deg60) % 6 + 6) % 6;
+  const movementIndex = (currentDirIndex + 5) % 6; 
+  const [dqN, drN] = HEX_DIRS[movementIndex];
+  const nextKey = key(player.q + dqN, player.r + drN);
+
+  ctx.fillStyle="#000";
+  ctx.fillRect(0,0,W,H);
+
+  const faces=[];
+
+  for(const col of world.cols){
+    const colKey = key(col.q, col.r);
+    const top = hexCorners(col.x, col.h, col.z, world.hexSize);
+    const topP = top.map(project);
+    if(topP.some(p=>!p)) continue;
+
+    const isNext = (colKey === nextKey);
+    const isVisited = world.visited.has(colKey);
+    const isSpent = world.spent.has(colKey);
+
+    // Push Top Face
+    const depthTop = topP.reduce((s,p)=>s+p.z,0)/6;
+    faces.push({
+      type:"top", pts:topP, depth:depthTop, 
+      isVisited, isSpent, isNext, q:col.q, r:col.r
+    });
+
+    // --- SPIRE CREATION ---
+    if (col.type === "sentinel_node" && !isSpent) {
+      const spireHeight = 150 * DPR;
+      const tipY = col.h + spireHeight; 
+      const tipP = project({ x: col.x, y: tipY, z: col.z });
+      const baseP = project({ x: col.x, y: col.h, z: col.z });
+      if (tipP && baseP) {
+        faces.push({
+          type: "spire",
+          pts: [baseP, tipP],
+          depth: tipP.z
+        });
+      }
+    }
+
+    // Side faces logic
+    for(let i=0; i<6; i++){
+      const [dq, dr] = HEX_DIRS[i];
+      const n = world.map.get(key(col.q+dq, col.r+dr));
+      const nh = n ? n.h : world.baseY-50;
+      if(nh >= col.h) continue; 
+
+      const topA = top[i];
+      const topB = top[(i+1)%6];
+      const botA = {...topA, y:nh};
+      const botB = {...topB, y:nh};
+
+      const quad = [botA, botB, topB, topA].map(project);
+      if(quad.some(p=>!p)) continue;
+
+      const depthSide = (quad[0].z + quad[2].z) * 0.5;
+      faces.push({type:"side", pts:quad, depth:depthSide, isNext});
+    }
+  }
+
+  // Add player faces
+  faces.push(...getPlayerFaces());
+
+  // Depth sort
+  faces.sort((a,b) => b.depth - a.depth);
+
+  for(const f of faces){
+    ctx.lineWidth = 1 * DPR;
+
+    // 1. Handle Spire Rendering
+    if (f.type === "spire") {
+      const pulse = Math.sin(performance.now() * 0.005) * 5;
+      ctx.beginPath();
+      ctx.moveTo(f.pts[0].x, f.pts[0].y);
+      ctx.lineTo(f.pts[1].x, f.pts[1].y + pulse);
+      ctx.strokeStyle = "#ff8800";
+      ctx.lineWidth = 2 * DPR;
+      ctx.setLineDash([8, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(f.pts[1].x, f.pts[1].y + pulse, 2 * DPR, 0, Math.PI * 2);
+      ctx.fill();
+      continue; 
+    }
+
+    // 2. Define Styles based on type
+    if (f.type === "player") {
+      ctx.fillStyle = f.color;
+      ctx.strokeStyle = "#ff8888"; 
+    } 
+    // PRIORITY: If it's a node and NOT spent, it MUST be orange (regardless of visited status)
+    else if (f.type === "top" && world.map.get(key(f.q, f.r))?.type === "sentinel_node" && !f.isSpent) {
+      ctx.fillStyle = "#ff8800";
+      ctx.strokeStyle = "#ffffff";
+    }
+    else if (f.type === "top" && f.isSpent) {
+      ctx.fillStyle = "#000000";
+      ctx.strokeStyle = "rgba(120,255,120,0.3)";
+    }
+    else if (f.type === "top" && f.isVisited) {
+      ctx.fillStyle = "rgba(180,0,0,0.9)";
+      ctx.strokeStyle = "rgba(120,255,120,0.9)";
+    } 
+    else {
+      ctx.fillStyle = f.type === "side" ? "rgba(0,40,0,0.7)" : "rgba(0,70,0,0.9)";
+      ctx.strokeStyle = "rgba(120,255,120,0.9)";
+    }
+
+    // 3. Highlight Glow
+    if (f.isNext) {
+      const pPulse = Math.sin(performance.now() * 0.005) * 0.2 + 0.8;
+      ctx.strokeStyle = `rgba(255, 255, 255, ${pPulse})`;
+      ctx.lineWidth = 3 * DPR;
+      if(f.type === "top") ctx.fillStyle = "rgba(100, 255, 100, 0.4)";
+    }
+
+    // 4. Draw Face Path
+    ctx.beginPath();
+    ctx.moveTo(f.pts[0].x, f.pts[0].y);
+    for(let i=1; i<f.pts.length; i++) ctx.lineTo(f.pts[i].x, f.pts[i].y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // Projectiles
+  hexProjectiles.forEach(p => {
+    if (p.delay > 0) return;
+    const pt = project({x: p.x, y: p.y, z: p.z});
+    if (!pt) return;
+    ctx.fillStyle = "#ff0000";
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 2 * DPR, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  drawSentinel();
+  drawSentinelBeam(dt);
+  drawMiniMap();
+}
+// ============================================================
+// Loop
+// ============================================================
+
+let last=performance.now();
+function loop(t){
+  const dt=Math.min(.05,(t-last)/1000);
+  last=t;
+
+  if (isPaused) {
+    requestAnimationFrame(loop);
+    return; // Stop logic and rendering while paused
+  }
+
+  step(dt);
+  updateSentinel(dt);
+  HexAudio.update();
+  updateProjectiles(dt); // <--- ADD THIS LINE
+  render(dt);
+  updateHUD();
+
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+window.closeNode = () => {
+  isPaused = false;
+  document.getElementById('node-popup').style.display = 'none';
+  // Re-engage the pointer lock so movement works immediately
+  canvas.requestPointerLock();
+};
+
+//===== WIKI-BREACH (Upgraded HEX-21)
+window.hex21 = {
+  nodeQ: 0, nodeR: 0,
+  currentStake: 0,
+  correctWord: "",
+  choices: [],
+  // --- TIMER STATE ---
+  timer: null,
+  timeLeft: 10,
+
+  init() {
+    const msg = document.getElementById('game-msg');
+    const area = document.getElementById('choices-grid');
+    const stakeBtn = document.getElementById('confirm-stake-btn');
+    const textCont = document.getElementById('text-container');
+    const stakeControls = document.getElementById('stake-controls');
+    
+    // Safety: Stop any zombie timers from previous rounds
+    clearInterval(this.timer);
+    this.timeLeft = 10;
+    const timerCont = document.getElementById('timer-container');
+    if(timerCont) timerCont.style.display = "none";
+    
+    msg.innerText = "";
+    area.style.display = "none";
+    stakeControls.style.display = "block";
+    stakeBtn.style.display = "inline-block";
+    textCont.innerHTML = "<span style='color:#ff8800'>CONNECTING...</span>";
+
+    const maxStake = world.visited.size;
+    const slider = document.getElementById('stake-slider');
+    slider.max = 5;
+    slider.value = Math.floor(maxStake / 1);
+    this.currentStake = parseInt(slider.value);
+    document.getElementById('stake-val').innerText = this.currentStake;
+
+    slider.oninput = () => {
+      this.currentStake = parseInt(slider.value);
+      document.getElementById('stake-val').innerText = this.currentStake;
+    };
+
+    this.fetchWikiData();
+  },
+
+  fetchWikiData: async function() {
+    try {
+      const resp = await fetch('https://en.wikipedia.org/api/rest_v1/page/random/summary');
+      const data = await resp.json();
+      let text = data.extract;
+      
+      // --- NEW POC TAG LOGIC (WIDE NET) ---
+      // We combine the short description and the first 100 characters of text 
+      // to give the classifier more clues.
+      const combinedInfo = (data.description || "") + " " + (data.extract || "").substring(0, 100);
+      const category = getWikiCategory(combinedInfo); 
+      
+      this.currentCategory = category.name; // <--- ADD THIS LINE
+      
+      const categoryTag = `<div style="background:${category.color}; color:#000; display:inline-block; padding:2px 6px; font-size:10px; font-weight:bold; margin-bottom:8px; border-radius:2px;">RECOVERED FRAGMENT: ${category.name}</div><br/>`;
+      // -------------------------------------
+
+      const words = text.split(' ').filter(w => w.length > 6);
+      if (words.length === 0) return this.fetchWikiData();
+      
+      let rawWord = words[Math.floor(Math.random() * words.length)];
+      this.correctWord = rawWord.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
+      
+      const regex = new RegExp(`\\b${this.correctWord}\\b`, 'i');
+      const displayBody = text.replace(regex, `<span style="background:#ff8800; color:#000; padding:0 4px; font-weight:bold;">[REDACTED]</span>`);
+      
+      // Inject the TAG + the REDACTED TEXT
+      document.getElementById('text-container').innerHTML = categoryTag + displayBody;
+      
+      this.prepareChoices(text);
+    } catch(e) {
+      document.getElementById('text-container').innerText = "SIGNAL LOST. RETRYING...";
+      setTimeout(() => this.fetchWikiData(), 1000);
+    }
+  },
+
+  prepareChoices: function(fullText) {
+    const allWords = fullText.toUpperCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").split(/\s+/);
+    const possibleDecoys = [...new Set(allWords.filter(w => w.length >= 5 && w !== this.correctWord.toUpperCase()))];
+    let finalChoices = [this.correctWord.toUpperCase()];
+    while(finalChoices.length < 4 && possibleDecoys.length > 0) {
+      let randomIndex = Math.floor(Math.random() * possibleDecoys.length);
+      finalChoices.push(possibleDecoys.splice(randomIndex, 1)[0]);
+    }
+    const backup = ["INFRASTRUCTURE", "ANOMALY", "ENCRYPTION", "PROTOCOL"];
+    while(finalChoices.length < 4) {
+      let d = backup[Math.floor(Math.random() * backup.length)];
+      if(!finalChoices.includes(d)) finalChoices.push(d);
+    }
+    this.choices = finalChoices.sort(() => Math.random() - 0.5);
+  },
+
+  revealChoices: function() {
+    document.getElementById('stake-controls').style.display = "none";
+    
+    // Show and Start Timer
+    const tCont = document.getElementById('timer-container');
+    if(tCont) tCont.style.display = "block";
+    
+    const grid = document.getElementById('choices-grid');
+    grid.innerHTML = "";
+    grid.style.display = "grid";
+    this.choices.forEach(choice => {
+      const btn = document.createElement('button');
+      btn.className = "node-btn";
+      btn.innerText = choice;
+      btn.onclick = () => window.hex21.handleGuess(choice);
+      grid.appendChild(btn);
+    });
+
+    this.startCountdown();
+  },
+
+  startCountdown: function() {
+    const bar = document.getElementById('timer-bar');
+    this.timeLeft = 10;
+    this.timer = setInterval(() => {
+      this.timeLeft -= 0.1;
+      const percent = (this.timeLeft / 10) * 100;
+      if (bar) bar.style.width = percent + "%";
+
+      if (this.timeLeft <= 0) {
+        clearInterval(this.timer);
+        this.endGame(false); // AUTO-LOSE on timeout
+      }
+    }, 100);
+  },
+
+  handleGuess: function(picked) {
+    clearInterval(this.timer); // Stop the clock immediately
+    const isWin = picked.toUpperCase() === this.correctWord.toUpperCase();
+    this.endGame(isWin);
+  },
+
+  endGame(win) {
+    clearInterval(this.timer); // Safety clear
+    const msg = document.getElementById('game-msg');
+    const nodeKey = key(this.nodeQ, this.nodeR);
+
+    if (win) {
+      msg.innerText = "BREACH SUCCESS!";
+      msg.style.color = "#9f9";
+
+// --- FINAL 5-PILLAR ROUTING LOGIC ---
+      const cat = this.currentCategory;
+      // Normalizes the data: if it's an object, get the name; if it's a string, use it.
+      const bucketName = (cat && typeof cat === 'object') ? cat.name : cat;
+
+      if (bucketName === "BIOS") {
+        world.biosPercent = Math.min((world.biosPercent || 0) + 5, 100);
+      } else if (bucketName === "CHRONOS") {
+        world.chronosPercent = Math.min((world.chronosPercent || 0) + 5, 100);
+      } else if (bucketName === "TECH") {
+        world.techPercent = Math.min((world.techPercent || 0) + 5, 100);
+      } else if (bucketName === "ETHOS") {
+        world.ethosPercent = Math.min((world.ethosPercent || 0) + 5, 100);
+      } else if (bucketName === "LOGOS") {
+        world.logosPercent = Math.min((world.logosPercent || 0) + 5, 100);
+      } else {
+        // OPTIONAL: If a node is completely unclassified, 
+        // you can choose to give a default point or give nothing.
+        // Let's default to LOGOS for unrecognized "junk" data:
+        world.logosPercent = Math.min((world.logosPercent || 0) + 5, 100);
+      }
+      
+      window.updateHUD(); 
+      // ------------------------------------
+
+      world.spent.add(nodeKey);
+      world.visited.add(nodeKey);
+      launchPaintNova(this.nodeQ, this.nodeR, Math.floor(this.currentStake / 2) + 2);
+      world.shieldsActive = Math.max(0, (world.shieldsActive || 0) - 1);
+      
+      updateHUD(); // Refresh text readout
+    } else {
+      // KEEPING YOUR PENALTY/TELEPORT LOGIC INTACT
+      msg.innerText = (this.timeLeft <= 0) ? "LINK EXPIRED! TELEPORTING..." : "TRACE DETECTED! TELEPORTING...";
+      msg.style.color = "#f44";
+      
+      // Teleport player to Sentinel
+      player.x = world.sentinel.x; player.z = world.sentinel.z;
+      player.q = world.sentinel.q; player.r = world.sentinel.r;
+      
+      let items = Array.from(world.visited);
+      let penaltyApplied = 0;
+      for (let i = 0; i < items.length && penaltyApplied < this.currentStake; i++) {
+        const k = items[i];
+        const hexData = world.map.get(k);
+        if (hexData && hexData.type === "sentinel_node") continue;
+        world.spent.add(k);
+        world.visited.delete(k);
+        penaltyApplied++;
+      }
+      world.visited.delete(nodeKey);
+      updateHUD();
+    }
+
+    // Closing the popup and returning control
+    setTimeout(() => { 
+      isPaused = false;
+      document.getElementById('node-popup').style.display = 'none';
+      canvas.requestPointerLock();
+    }, 2000);
+  }
+};
+// Also define the nova function if you haven't yet
+window.launchPaintNova = function(startQ, startR, rings) {
+  let step = 0;
+  const interval = setInterval(() => {
+    if (step >= rings) { clearInterval(interval); return; }
+    
+    world.cols.forEach(c => {
+      const dist = Math.max(
+        Math.abs(startQ - c.q),
+        Math.abs(startR - c.r),
+        Math.abs((-startQ - startR) - (-c.q - c.r))
+      );
+      
+      // --- UPDATED LOGIC ---
+      // Only paint the hex if it is NOT an orange sentinel node
+      if (dist <= step && c.type !== "sentinel_node" && !world.spent.has(key(c.q, c.r))) {
+        world.visited.add(key(c.q, c.r));
+      }
+    });
+    
+    if (HexAudio.isStarted) HexAudio.playCapture();
+    step++;
+  }, 150);
+}
+})();
+</script>
+
+<div id="shield-alert" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); color:#ff0000; font-size:32px; font-weight:bold; text-shadow:0 0 15px #000; z-index:9999; pointer-events:none; font-family:monospace;">
+  SHIELDS STILL ONLINE!!!
+</div>
+
+<div id="node-popup">
+  <h2 style="margin:0; color:#ff8800; font-size: 16px;">[ SIGNAL BREACH ]</h2>
+  <div id="game-area">
+    <div id="text-container" style="min-height: 80px; max-height: 140px; overflow-y: auto; margin: 12px 0; color: #ccc; font-size: 13px; text-align: left; line-height: 1.4; border: 1px solid #442200; padding: 10px; background: rgba(20,10,0,0.5); font-family: monospace;">
+      WAITING FOR SIGNAL...
+    </div>
+
+    <div id="stake-controls">
+      <p style="margin: 5px 0; font-size: 12px;">RISK AMMO: <span id="stake-val" style="color:#ff8800; font-weight:bold;">0</span></p>
+      <input type="range" id="stake-slider" min="0" max="5" value="0" style="width: 100%; cursor: pointer; accent-color: #ff8800;">
+      <button class="node-btn" id="confirm-stake-btn" onclick="window.hex21.revealChoices()" style="width:100%; margin-top:10px;">INITIALIZE RECOVERY</button>
+    </div>
+    
+    <div id="timer-container" style="display:none; width: 100%; height: 4px; background: #330000; margin-bottom: 10px;">
+      <div id="timer-bar" style="width: 100%; height: 100%; background: #ff4444; transition: width 0.1s linear;"></div>
+    </div>
+
+    <div id="choices-grid" style="display: none; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;"></div>
+    
+    <p id="game-msg" style="margin-top:10px; font-size: 12px; height: 14px;"></p>
+  </div>
+</div>
+
+</body>
+</html>
