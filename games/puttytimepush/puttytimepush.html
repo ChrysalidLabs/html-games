@@ -74,6 +74,21 @@ const ctx = canvas.getContext('2d', { alpha: false });
 let w, h, dpr;
 const keys = {};
 
+// --- INITIALIZE MILKY WAY STARFIELD ---
+const starCount = 1000;
+const stars = [];
+for (let i = 0; i < starCount; i++) {
+    stars.push({
+        // Random spherical distribution
+        x: Math.random() * 2 - 1,
+        y: Math.random() * 2 - 1,
+        z: Math.random() * 2 - 1,
+        size: Math.random() * 2 + 0.5,
+        // Give some stars a "Milky Way" purple/blue tint
+        color: Math.random() > 0.8 ? `hsla(${260 + Math.random() * 40}, 80%, 80%, ${Math.random()})` : `rgba(255,255,255,${Math.random()})`
+    });
+}
+
 const TILE_SIZE = 32, VIEW_DIST = 85, RENDER_MARGIN = 35; 
 const HORIZON = VIEW_DIST * TILE_SIZE;
 const FRICTION = 0.98, GRAVITY = 0.18, MAX_POWER = 12.0;
@@ -300,6 +315,29 @@ function draw(timestamp) {
         shakeTime *= 0.92;
     }
     ctx.fillStyle = '#00050a'; ctx.fillRect(0, 0, w, h);
+    
+    // --- DRAW PARALLAX MILKY WAY ---
+    stars.forEach(s => {
+        // Apply Camera Rotation (Yaw)
+        let rx = s.x * Math.cos(cam.yaw) - s.z * Math.sin(cam.yaw);
+        let rz = s.x * Math.sin(cam.yaw) + s.z * Math.cos(cam.yaw);
+        
+        // Apply Camera Tilt (Pitch)
+        let ry = s.y * Math.cos(cam.pitch) - rz * Math.sin(cam.pitch);
+        let rzp = s.y * Math.sin(cam.pitch) + rz * Math.cos(cam.pitch);
+
+        // Only draw stars that are in front of the camera (rzp > 0)
+        if (rzp > 0) {
+            // Perspective projection for the sky dome
+            const screenX = (rx / rzp) * w + w / 2;
+            const screenY = (ry / rzp) * h + h / 2;
+
+            ctx.fillStyle = s.color;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, s.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    });
     
     const world = [], cTX = Math.floor(cam.x/TILE_SIZE), cTZ = Math.floor(cam.z/TILE_SIZE);
     for(let z = cTZ - RENDER_MARGIN; z < cTZ + VIEW_DIST; z++) {
