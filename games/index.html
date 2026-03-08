@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mark Russell | Technical AI Product Manager</title>
+    <style>
+        :root {
+            --bg: #020202;
+            --card-bg: #080808;
+            --accent: #00ff41; 
+            --text-main: #ffffff;
+            --text-dim: #777;
+            --border: #1a1a1a;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            font-family: 'Inter', -apple-system, sans-serif;
+            line-height: 1.4;
+            overflow-x: hidden;
+        }
+
+        .background-fx {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(0, 255, 65, 0) 50%, rgba(0, 255, 65, 0.01) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        header {
+            padding: 60px 5% 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: clamp(3rem, 8vw, 5rem);
+            font-weight: 900;
+            letter-spacing: -3px;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+            line-height: 0.9;
+        }
+
+        .title {
+            font-size: clamp(1.2rem, 3vw, 1.8rem);
+            font-weight: 400;
+            color: var(--accent);
+            letter-spacing: -0.5px;
+            margin-bottom: 5px;
+        }
+
+        .contact-link {
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: var(--text-dim);
+            text-decoration: none;
+            transition: 0.2s;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+
+        .contact-link:hover { color: var(--accent); }
+
+        .metrics-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .metrics-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .lozenge {
+            font-family: monospace;
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: var(--accent);
+            border: 1px solid rgba(0, 255, 65, 0.3);
+            background: rgba(0, 255, 65, 0.05);
+            padding: 5px 12px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 5% 40px;
+        }
+
+        .project-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 30px;
+            align-items: stretch;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .card:hover {
+            border-color: var(--accent);
+            transform: translateY(-5px);
+            box-shadow: 0 0 25px rgba(0, 255, 65, 0.15);
+        }
+
+        .video-area {
+            width: 100%;
+            aspect-ratio: 16/9; 
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-bottom: 1px solid var(--border);
+            overflow: hidden;
+            transform: scale(0.9);
+            margin-top: -2%;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.6; /* Dim when paused */
+            transition: opacity 0.3s ease;
+        }
+
+        .card:hover video {
+            opacity: 1; /* Brighten on hover */
+        }
+
+        .card-content { 
+            padding: 0 25px 25px 25px; 
+            flex-grow: 1; 
+            display: flex; 
+            flex-direction: column; 
+        }
+
+        .card-tag {
+            font-family: monospace;
+            font-size: 0.65rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        h3 { font-size: 1.4rem; margin-bottom: 10px; font-weight: 800; text-transform: lowercase; }
+
+        .desc {
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            line-height: 1.5;
+            margin-bottom: 25px;
+        }
+
+        .btn {
+            margin-top: auto; 
+            display: inline-block;
+            padding: 12px 0;
+            width: 100%;
+            text-align: center;
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            text-decoration: none;
+            font-family: monospace;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+
+        .btn:hover {
+            border-color: var(--accent);
+            color: var(--bg);
+            background: var(--accent);
+        }
+
+        footer {
+            padding: 80px 0;
+            text-align: center;
+            font-family: monospace;
+            font-size: 0.7rem;
+            color: #444;
+            letter-spacing: 2px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .footer-accent {
+            color: var(--accent);
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="background-fx"></div>
+
+    <header>
+        <h1>Mark Russell</h1>
+        <div class="title">Technical AI Accelerate Product Manager</div>
+        <a href="mailto:m.russell@mac.com" class="contact-link">m.russell@mac.com</a>
+
+        <div class="metrics-container">
+            <div class="metrics-row">
+                <div class="lozenge">10x Speed to POC</div>
+                <div class="lozenge">75% Cost Reduction to MVP</div>
+                <div class="lozenge">Zero Dependency Stack</div>
+            </div>
+            <div class="metrics-row">
+                <div class="lozenge">60FPS Browser Native</div>
+                <div class="lozenge">AI-Augmented Architecture</div>
+                <div class="lozenge">Rapid Prototyping</div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="project-grid">
+            
+            <div class="card">
+                <div class="video-area">
+                    <video src="puttytimepush.mp4" muted loop playsinline></video>
+                </div>
+                <div class="card-content">
+                    <span class="card-tag">// PHYSICS_MOMENTUM_ENGINE</span>
+                    <h3>puttytimepush</h3>
+                    <p class="desc">
+                        A high-fidelity pseudo-3D engine built in &lt; 600 lines. <br>
+                        Engineers slope-vector physics and procedural height-maps via AI-assisted workflow. <br>
+                        Achieved 600% efficiency gain over standard 3-person dev team cycles. <br>
+                        Resolved complex Z-fighting artifacts via manual post-render plasma passes.
+                    </p>
+                    <a href="./puttytimepush/index.html" class="btn">Execute</a>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="video-area">
+                    <video id="v-recover" src="recover-all-knowledge.mp4" muted loop playsinline></video>
+                </div>
+                <div class="card-content">
+                    <span class="card-tag">// DATA_INTEGRATION_ARCH</span>
+                    <h3>recover-all-knowledge</h3>
+                    <p class="desc">
+                        Managed 1.15M tokens across 8 distinct sprints for real-time API integration. <br>
+                        Implements procedural occlusion culling for infinite-feeling 60FPS hex-grids. <br>
+                        Architected 5-pillar Regex weighted heuristics for Wikipedia data translation. <br>
+                        Optimized memory via tile-capping to prevent exponential JS heap expansion.
+                    </p>
+                    <a href="./recover-all-knowledge/index.html" class="btn">Execute</a>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="video-area">
+                    <video src="roider.mp4" muted loop playsinline></video>
+                </div>
+                <div class="card-content">
+                    <span class="card-tag">// KINETIC_ARCADE_ENGINE</span>
+                    <h3>roider</h3>
+                    <p class="desc">
+                        Browser-native kinetic engine featuring manual 3D-to-2D projection matrices. <br>
+                        Utilizes organic Brownian Offsets and structural tether-chain physics logic. <br>
+                        Completed 12 iterative major-version cycles in a single 4.5-hour sprint. <br>
+                        Replaced ~$20k of traditional dev costs with a high-fidelity AI-pairing model.
+                    </p>
+                    <a href="./roider/index.html" class="btn">Execute</a>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <footer>
+        AI ACCELERATED PRODUCT MANAGEMENT <br> 
+        <span class="footer-accent">SPEEDIER // BETTER TIME TO MVP // RAPID POC DELIVERY</span>
+    </footer>
+
+    <script>
+        // Universal hover logic for all cards
+        document.querySelectorAll('.card').forEach(card => {
+            const video = card.querySelector('video');
+            
+            if (video) {
+                // Apply specific speed to the recover video only
+                if (video.id === 'v-recover') {
+                    video.playbackRate = 0.5;
+                }
+
+                card.addEventListener('mouseenter', () => {
+                    video.play();
+                });
+
+                card.addEventListener('mouseleave', () => {
+                    video.pause();
+                });
+            }
+        });
+    </script>
+</body>
+</html>
