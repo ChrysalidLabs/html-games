@@ -381,40 +381,63 @@ if (beamBot) {
         ctx.beginPath(); ctx.moveTo(p.pts[0].x, p.pts[0].y); ctx.lineTo(p.pts[1].x, p.pts[1].y); ctx.lineTo(p.pts[2].x, p.pts[2].y); ctx.closePath(); ctx.fill(); ctx.stroke();
     });
 
-    // --- PERMANENT FIX: ISOLATED BEAM RENDER PASS ---
+    // --- ENHANCED PLASMA BEAM (FLOWING/TWIRLING/SPARKING) ---
     const goalBottomY = -240;
     const beamBot = project({ x: goal.x, y: goalBottomY, z: goal.z });
 
-    // Only draw if the goal is within a reasonable distance
     if (beamBot && beamBot.depth < HORIZON * 2) {
+        const time = Date.now() * 0.002;
         const visibility = Math.max(0.3, 1 - (beamBot.depth / (HORIZON * 2.5)));
-        const beamWidth = Math.max(2, 40 * beamBot.scale);
         const screenTopY = -2000; 
-
-        // Use Math.floor to lock the beam to the physical pixel grid
         const drawX = Math.floor(beamBot.x);
         const drawY = Math.floor(beamBot.y - (4 * beamBot.scale));
 
+        // 1. DYNAMIC PLASMA CORE (Twirling multi-colors)
+        const hue1 = (time * 50) % 360;
+        const hue2 = (hue1 + 60) % 360;
+        
         const grad = ctx.createLinearGradient(drawX, drawY, drawX, screenTopY);
-        grad.addColorStop(0, `rgba(0, 0, 0, 0)`); // Soft base to prevent clipping
-        grad.addColorStop(0.05, `rgba(0, 255, 204, ${0.8 * visibility})`);
-        grad.addColorStop(0.5, `rgba(0, 255, 255, ${0.2 * visibility})`);
-        grad.addColorStop(1, `rgba(255, 255, 255, 0)`);
+        grad.addColorStop(0, `hsla(${hue1}, 100%, 50%, 0)`);
+        grad.addColorStop(0.1, `hsla(${hue1}, 100%, 70%, ${0.9 * visibility})`);
+        grad.addColorStop(0.4, `hsla(${hue2}, 100%, 60%, ${0.4 * visibility})`);
+        grad.addColorStop(1, `hsla(${hue1}, 100%, 80%, 0)`);
+
+        // Create the "Twirl" by oscillating the line width
+        const twirl = Math.sin(time * 4) * (10 * beamBot.scale);
+        const beamWidth = Math.max(4, (40 * beamBot.scale) + twirl);
 
         ctx.beginPath();
         ctx.strokeStyle = grad;
         ctx.lineWidth = beamWidth;
+        ctx.lineCap = 'round';
         ctx.moveTo(drawX, drawY);
         ctx.lineTo(drawX, screenTopY);
         ctx.stroke();
 
-        // Stable High-Energy Core
+        // 2. FLOWING INNER NERVE (White energy center)
         ctx.beginPath();
-        ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 * visibility})`;
-        ctx.lineWidth = Math.max(1, beamWidth / 5);
-        ctx.moveTo(drawX, drawY);
-        ctx.lineTo(drawX, screenTopY);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${0.7 * visibility})`;
+        ctx.lineWidth = Math.max(1, beamWidth / 6);
+        // The inner nerve "wiggles" to simulate flowing plasma
+        const wiggle = Math.cos(time * 10) * (5 * beamBot.scale);
+        ctx.moveTo(drawX + wiggle, drawY);
+        ctx.lineTo(drawX - wiggle, screenTopY);
         ctx.stroke();
+
+        // 3. GENERATE SPARKS
+        for (let i = 0; i < 5; i++) {
+            const sparkTime = time + i;
+            // Sparks fly upward
+            const sparkY = drawY - ((sparkTime * 400) % (drawY + 1000));
+            // Sparks spiral around the beam
+            const sparkX = drawX + Math.sin(sparkTime * 8) * (beamWidth * 0.8);
+            const sparkSize = Math.max(1, 3 * beamBot.scale);
+
+            ctx.fillStyle = `hsla(${hue2}, 100%, 80%, ${visibility})`;
+            ctx.beginPath();
+            ctx.arc(sparkX, sparkY, sparkSize, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 
     anomalies.forEach(a => {
