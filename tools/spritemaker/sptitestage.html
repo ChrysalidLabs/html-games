@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sprite Stage V1</title>
+  <style>
+    :root{
+      --bg:#0a0d12;
+      --panel:#131922;
+      --panel2:#1b2430;
+      --line:#2f3b4c;
+      --text:#e8edf4;
+      --muted:#97a4b3;
+      --accent:#7c5cff;
+      --accent2:#5dd6ff;
+      --ok:#59d38c;
+      --warn:#ffd166;
+      --danger:#ff5c7a;
+      --solid:#59d38c;
+      --hurt:#5dd6ff;
+      --hit:#ff5c7a;
+      --sensor:#ffd166;
+      --platform:#8392a6;
+      --stageA:#0d1118;
+      --stageB:#111827;
+    }
+    *{box-sizing:border-box}
+    html,body{
+      margin:0;
+      width:100%;
+      height:100%;
+      overflow:hidden;
+      background:var(--bg);
+      color:var(--text);
+      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    }
+    body{
+      display:grid;
+      grid-template-columns:360px 1fr;
+      gap:10px;
+      padding:10px;
+    }
+    .panel{
+      min-height:0;
+      min-width:0;
+      border:1px solid var(--line);
+      border-radius:14px;
+      overflow:hidden;
+      background:linear-gradient(180deg,var(--panel),var(--panel2));
+      box-shadow:0 12px 24px rgba(0,0,0,.25);
+    }
+    #leftPanel{display:flex;flex-direction:column;overflow-y:auto}
+    #stagePanel{display:flex;flex-direction:column;overflow:hidden}
+    #leftPanel::-webkit-scrollbar{width:10px}
+    #leftPanel::-webkit-scrollbar-thumb{
+      background:#364150;border-radius:999px;border:2px solid transparent;background-clip:padding-box;
+    }
+    .section{padding:12px;border-bottom:1px solid var(--line)}
+    .section:last-child{border-bottom:none}
+    .title{
+      font-weight:800;
+      font-size:13px;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      color:var(--accent2);
+      margin-bottom:10px;
+    }
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+    label{font-size:12px;color:var(--muted)}
+    input[type="text"],input[type="number"],select,textarea{
+      background:#0f1318;
+      color:var(--text);
+      border:1px solid var(--line);
+      border-radius:8px;
+      padding:8px 10px;
+      font-size:13px;
+      outline:none;
+      min-width:0;
+    }
+    input[type="number"]{width:90px}
+    input[type="range"]{width:100%}
+    button{
+      background:#11161c;
+      color:var(--text);
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:8px 10px;
+      cursor:pointer;
+      font-weight:700;
+      font-size:12px;
+    }
+    button:hover{border-color:var(--accent)}
+    button.active{background:rgba(124,92,255,.16);border-color:var(--accent)}
+    button.ok{border-color:rgba(89,211,140,.35)}
+    button.warn{border-color:rgba(255,209,102,.35)}
+    button.danger{border-color:rgba(255,92,122,.35)}
+    .small{font-size:11px;color:var(--muted)}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .hint{font-size:12px;color:var(--muted);line-height:1.45}
+    .pill{
+      display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;
+      background:rgba(124,92,255,.12);border:1px solid rgba(124,92,255,.28);font-size:11px;font-weight:700;color:#ddd7ff;
+    }
+    .hudbox{
+      background:#10161d;
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:10px;
+    }
+    #stageWrap{
+      flex:1;
+      min-height:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.03), transparent 40%),
+        linear-gradient(180deg, var(--stageB), var(--stageA));
+      position:relative;
+    }
+    canvas{
+      image-rendering:pixelated;
+      image-rendering:crisp-edges;
+      border:1px solid var(--line);
+      background:#000;
+      box-shadow:0 10px 30px rgba(0,0,0,.35);
+    }
+    #topBar{
+      padding:10px;
+      border-bottom:1px solid var(--line);
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .tag{
+      display:inline-block;
+      padding:2px 8px;
+      border-radius:999px;
+      font-size:10px;
+      font-weight:800;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+      border:1px solid transparent;
+    }
+    .tag.solid{color:var(--solid);border-color:rgba(89,211,140,.35);background:rgba(89,211,140,.14)}
+    .tag.sensor{color:var(--sensor);border-color:rgba(255,209,102,.35);background:rgba(255,209,102,.14)}
+    .tag.hit{color:var(--hit);border-color:rgba(255,92,122,.35);background:rgba(255,92,122,.14)}
+    .tag.hurt{color:var(--hurt);border-color:rgba(93,214,255,.35);background:rgba(93,214,255,.14)}
+  </style>
+</head>
+<body>
+  <div id="leftPanel" class="panel">
+    <div class="section">
+      <div class="title">Load Asset</div>
+      <div class="row">
+        <button id="loadJsonBtn" class="ok">Load Asset JSON</button>
+        <input id="jsonInput" type="file" accept="application/json" style="display:none">
+      </div>
+      <div class="row">
+        <button id="loadPngBtn" class="ok">Load Sheet PNG</button>
+        <input id="pngInput" type="file" accept="image/png,image/*" style="display:none">
+      </div>
+      <div class="hint">Load both files. JSON defines frames, origin, collisions, sensors, and animations. PNG is the matching sprite sheet image.</div>
+      <div class="small">Asset: <span id="assetStatus" class="mono">none loaded</span></div>
+    </div>
+
+    <div class="section">
+      <div class="title">Playback / Animation</div>
+      <div class="row">
+        <label>Animation</label>
+        <select id="animationSelect"></select>
+        <button id="applyAnimBtn">Apply</button>
+      </div>
+      <div class="row">
+        <button id="playBtn" class="ok">Run</button>
+        <button id="pauseBtn">Pause</button>
+        <button id="resetBtn" class="warn">Reset Spawn</button>
+      </div>
+      <div class="row">
+        <label><input id="loopToggle" type="checkbox" checked> Loop animation</label>
+        <label><input id="debugToggle" type="checkbox" checked> Debug boxes</label>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="title">Stage / Physics</div>
+      <div class="row">
+        <label>Pixels Per Unit</label>
+        <input id="ppuInput" type="number" step="1" value="4">
+        <label>Gravity</label>
+        <input id="gravityInput" type="number" step="0.05" value="0.28">
+      </div>
+      <div class="row">
+        <label>Move Accel</label>
+        <input id="moveAccelInput" type="number" step="0.05" value="0.22">
+        <label>Max Speed</label>
+        <input id="maxSpeedInput" type="number" step="0.05" value="1.8">
+      </div>
+      <div class="row">
+        <label>Jump Velocity</label>
+        <input id="jumpVelInput" type="number" step="0.05" value="-4.8">
+        <label>Friction</label>
+        <input id="frictionInput" type="number" step="0.01" value="0.82">
+      </div>
+      <div class="row">
+        <label><input id="cameraFollowToggle" type="checkbox" checked> Camera follow</label>
+        <label><input id="showOriginToggle" type="checkbox" checked> Origin crosshair</label>
+      </div>
+      <div class="hint">Arrow keys or A/D to move, Space/W/Up to jump, R to reset, G to toggle debug.</div>
+    </div>
+
+    <div class="section">
+      <div class="title">World</div>
+      <div class="row">
+        <button id="resetWorldBtn">Reset Platforms</button>
+        <button id="addPlatformBtn">Add Floating Platform</button>
+      </div>
+      <div class="hint">Stage V1 uses simple static rect platforms. This is a collision audit chamber, not a level editor.</div>
+    </div>
+
+    <div class="section">
+      <div class="title">Live HUD</div>
+      <div class="hudbox small mono" id="liveHud">
+        waiting...
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <span class="tag solid">solidBox</span>
+        <span class="tag.sensor">sensors</span>
+        <span class="tag.hurt">hurtBox</span>
+        <span class="tag.hit">hitBox</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="stagePanel" class="panel">
+    <div id="topBar">
+      <span class="pill">Stage V1</span>
+      <span class="pill">Platform collision audit</span>
+      <span class="pill">Single asset runtime proof</span>
+    </div>
+    <div id="stageWrap">
+      <canvas id="stageCanvas" width="1280" height="720"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('stageCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const ui = {
+      jsonInput: document.getElementById('jsonInput'),
+      pngInput: document.getElementById('pngInput'),
+      loadJsonBtn: document.getElementById('loadJsonBtn'),
+      loadPngBtn: document.getElementById('loadPngBtn'),
+      assetStatus: document.getElementById('assetStatus'),
+      animationSelect: document.getElementById('animationSelect'),
+      applyAnimBtn: document.getElementById('applyAnimBtn'),
+      playBtn: document.getElementById('playBtn'),
+      pauseBtn: document.getElementById('pauseBtn'),
+      resetBtn: document.getElementById('resetBtn'),
+      loopToggle: document.getElementById('loopToggle'),
+      debugToggle: document.getElementById('debugToggle'),
+      ppuInput: document.getElementById('ppuInput'),
+      gravityInput: document.getElementById('gravityInput'),
+      moveAccelInput: document.getElementById('moveAccelInput'),
+      maxSpeedInput: document.getElementById('maxSpeedInput'),
+      jumpVelInput: document.getElementById('jumpVelInput'),
+      frictionInput: document.getElementById('frictionInput'),
+      cameraFollowToggle: document.getElementById('cameraFollowToggle'),
+      showOriginToggle: document.getElementById('showOriginToggle'),
+      liveHud: document.getElementById('liveHud'),
+      resetWorldBtn: document.getElementById('resetWorldBtn'),
+      addPlatformBtn: document.getElementById('addPlatformBtn')
+    };
+
+    const state = {
+      running: true,
+      loopAnimation: true,
+      showDebug: true,
+      showOrigin: true,
+      cameraFollow: true,
+      ppu: 4,
+      gravity: 0.28,
+      moveAccel: 0.22,
+      maxSpeed: 1.8,
+      jumpVel: -4.8,
+      friction: 0.82,
+      keys: {},
+      lastTime: 0,
+      accumulator: 0,
+      fixedStepMs: 1000 / 60,
+      camera: { x: 0, y: 0 },
+      asset: null,
+      sheetImage: null,
+      sheetReady: false,
+      platforms: [],
+      player: null
+    };
+
+    function makeDefaultWorld() {
+      state.platforms = [
+        { x: -80, y: 160, w: 320, h: 20 },
+        { x: 280, y: 120, w: 120, h: 16 },
+        { x: 460, y: 90, w: 120, h: 16 },
+        { x: 660, y: 60, w: 140, h: 16 },
+        { x: 860, y: 150, w: 220, h: 20 }
+      ];
+    }
+    makeDefaultWorld();
+
+    function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+    function hexToRgba(hex, a = 1) {
+      if (!hex) return `rgba(255,255,255,${a})`;
+      const clean = String(hex).replace('#', '');
+      const r = parseInt(clean.slice(0, 2), 16) || 255;
+      const g = parseInt(clean.slice(2, 4), 16) || 255;
+      const b = parseInt(clean.slice(4, 6), 16) || 255;
+      return `rgba(${r},${g},${b},${a})`;
+    }
+
+    function loadAnimationOptions() {
+      ui.animationSelect.innerHTML = '';
+      if (!state.asset?.animations) return;
+      Object.keys(state.asset.animations).forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        ui.animationSelect.appendChild(opt);
+      });
+      if (state.player && state.asset.animations[state.player.animation]) {
+        ui.animationSelect.value = state.player.animation;
+      }
+    }
+
+    function getDefaultMoveSpeed() {
+      return Number(state.asset?.defaults?.moveSpeed ?? state.maxSpeed) || state.maxSpeed;
+    }
+    function getDefaultJumpVelocity() {
+      return Number(state.asset?.defaults?.jumpVelocity ?? state.jumpVel) || state.jumpVel;
+    }
+    function getDefaultGravityScale() {
+      return Number(state.asset?.defaults?.gravityScale ?? 1) || 1;
+    }
+
+    function getAnimation(name) {
+      return state.asset?.animations?.[name] || null;
+    }
+
+    function frameEntryByIndex(index) {
+      return state.asset?.frames?.find(f => f.index === index) || null;
+    }
+
+    function getFrameOrigin(frameEntry) {
+      return frameEntry?.origin || state.asset?.defaults?.origin || { x: 0, y: 0 };
+    }
+
+    function getFrameBox(frameEntry, key) {
+      if (!frameEntry || !state.asset) return null;
+      if (key === 'solidBox') return frameEntry.solidBox || state.asset.defaults?.solidBox || null;
+      if (key === 'hurtBox') return frameEntry.hurtBox || state.asset.defaults?.hurtBox || null;
+      if (key === 'hitBox') return frameEntry.hitBox || state.asset.defaults?.hitBox || null;
+      if (key.startsWith('sensor_')) {
+        const k = key.split('_')[1];
+        return frameEntry.sensors?.[k] || state.asset.defaults?.sensors?.[k] || null;
+      }
+      return null;
+    }
+
+    function setPlayerAnimation(name) {
+      if (!state.player || !state.asset?.animations?.[name]) return;
+      if (state.player.animation === name) return;
+      state.player.animation = name;
+      state.player.animFrameCursor = 0;
+      state.player.animTimer = 0;
+    }
+
+    function createPlayer() {
+      if (!state.asset) return;
+      const spawnX = 120;
+      const spawnY = 40;
+      state.player = {
+        x: spawnX,
+        y: spawnY,
+        vx: 0,
+        vy: 0,
+        grounded: false,
+        facing: 1,
+        animation: Object.keys(state.asset.animations || {})[0] || 'idle',
+        animFrameCursor: 0,
+        animTimer: 0,
+        spawnX,
+        spawnY
+      };
+      loadAnimationOptions();
+      ui.animationSelect.value = state.player.animation;
+      syncTuningFromAsset();
+    }
+
+    function resetPlayer() {
+      if (!state.player) return;
+      state.player.x = state.player.spawnX;
+      state.player.y = state.player.spawnY;
+      state.player.vx = 0;
+      state.player.vy = 0;
+      state.player.grounded = false;
+      state.player.animFrameCursor = 0;
+      state.player.animTimer = 0;
+    }
+
+    function syncTuningFromAsset() {
+      if (!state.asset) return;
+      state.maxSpeed = getDefaultMoveSpeed();
+      state.jumpVel = getDefaultJumpVelocity();
+      state.gravity = 0.28 * getDefaultGravityScale();
+      ui.maxSpeedInput.value = state.maxSpeed;
+      ui.jumpVelInput.value = state.jumpVel;
+      ui.gravityInput.value = state.gravity;
+    }
+
+    function currentFrameIndex() {
+      if (!state.player || !state.asset) return 0;
+      const anim = getAnimation(state.player.animation);
+      if (!anim || !anim.frames?.length) return 0;
+      const i = clamp(state.player.animFrameCursor, 0, anim.frames.length - 1);
+      return anim.frames[i];
+    }
+
+    function currentFrameEntry() {
+      return frameEntryByIndex(currentFrameIndex());
+    }
+
+    function playerWorldOrigin() {
+      const frame = currentFrameEntry();
+      const origin = getFrameOrigin(frame);
+      return { x: state.player.x, y: state.player.y, ox: origin.x, oy: origin.y };
+    }
+
+    function boxToWorld(box) {
+      if (!box || !state.player) return null;
+      const o = playerWorldOrigin();
+      return {
+        x: state.player.x - o.ox + box.x,
+        y: state.player.y - o.oy + box.y,
+        w: box.w,
+        h: box.h
+      };
+    }
+
+    function overlap(a, b) {
+      return a.x < b.x + b.w &&
+             a.x + a.w > b.x &&
+             a.y < b.y + b.h &&
+             a.y + a.h > b.y;
+    }
+
+    function rectColor(key) {
+      if (key === 'solidBox') return getComputedStyle(document.documentElement).getPropertyValue('--solid').trim();
+      if (key === 'hurtBox') return getComputedStyle(document.documentElement).getPropertyValue('--hurt').trim();
+      if (key === 'hitBox') return getComputedStyle(document.documentElement).getPropertyValue('--hit').trim();
+      return getComputedStyle(document.documentElement).getPropertyValue('--sensor').trim();
+    }
+
+    function updateAnimation(dtMs) {
+      if (!state.player || !state.asset) return;
+      const anim = getAnimation(state.player.animation);
+      if (!anim || !anim.frames?.length) return;
+      const frameIdx = anim.frames[state.player.animFrameCursor] ?? anim.frames[0];
+      const frame = frameEntryByIndex(frameIdx);
+      const duration = Number(anim.durations?.[state.player.animFrameCursor] ?? frame?.duration ?? 120);
+
+      state.player.animTimer += dtMs;
+      while (state.player.animTimer >= duration) {
+        state.player.animTimer -= duration;
+        state.player.animFrameCursor += 1;
+        if (state.player.animFrameCursor >= anim.frames.length) {
+          if (ui.loopToggle.checked && anim.loop !== false) {
+            state.player.animFrameCursor = 0;
+          } else {
+            state.player.animFrameCursor = anim.frames.length - 1;
+            break;
+          }
+        }
+      }
+    }
+
+    function chooseMovementAnimation() {
+      if (!state.player || !state.asset) return;
+      const has = name => !!state.asset.animations?.[name];
+      if (!state.player.grounded) {
+        if (state.player.vy < -0.15 && has('jump')) setPlayerAnimation('jump');
+        else if (state.player.vy > 0.15 && has('fall')) setPlayerAnimation('fall');
+        return;
+      }
+      if (Math.abs(state.player.vx) > 0.15 && has('run')) {
+        setPlayerAnimation('run');
+        return;
+      }
+      if (has('idle')) setPlayerAnimation('idle');
+    }
+
+    function updatePlayer() {
+      if (!state.player || !state.asset) return;
+
+      const left = !!(state.keys['ArrowLeft'] || state.keys['KeyA']);
+      const right = !!(state.keys['ArrowRight'] || state.keys['KeyD']);
+      const jumpPressed = !!(state.keys['ArrowUp'] || state.keys['KeyW'] || state.keys['Space']);
+
+      if (left && !right) {
+        state.player.vx -= state.moveAccel;
+        state.player.facing = -1;
+      } else if (right && !left) {
+        state.player.vx += state.moveAccel;
+        state.player.facing = 1;
+      } else {
+        state.player.vx *= state.friction;
+        if (Math.abs(state.player.vx) < 0.01) state.player.vx = 0;
+      }
+
+      state.player.vx = clamp(state.player.vx, -state.maxSpeed, state.maxSpeed);
+
+      if (jumpPressed && state.player.grounded) {
+        state.player.vy = state.jumpVel;
+        state.player.grounded = false;
+      }
+
+      state.player.vy += state.gravity;
+
+      movePlayerAxisX();
+      movePlayerAxisY();
+
+      chooseMovementAnimation();
+    }
+
+    function movePlayerAxisX() {
+      const solid = getFrameBox(currentFrameEntry(), 'solidBox');
+      if (!solid) {
+        state.player.x += state.player.vx;
+        return;
+      }
+
+      state.player.x += state.player.vx;
+      let worldBox = boxToWorld(solid);
+
+      for (const p of state.platforms) {
+        if (!overlap(worldBox, p)) continue;
+
+        if (state.player.vx > 0) {
+          const right = worldBox.x + worldBox.w;
+          const penetration = right - p.x;
+          state.player.x -= penetration;
+        } else if (state.player.vx < 0) {
+          const penetration = (p.x + p.w) - worldBox.x;
+          state.player.x += penetration;
+        }
+        state.player.vx = 0;
+        worldBox = boxToWorld(solid);
+      }
+    }
+
+    function movePlayerAxisY() {
+      const solid = getFrameBox(currentFrameEntry(), 'solidBox');
+      state.player.grounded = false;
+
+      if (!solid) {
+        state.player.y += state.player.vy;
+        return;
+      }
+
+      state.player.y += state.player.vy;
+      let worldBox = boxToWorld(solid);
+
+      for (const p of state.platforms) {
+        if (!overlap(worldBox, p)) continue;
+
+        if (state.player.vy > 0) {
+          const bottom = worldBox.y + worldBox.h;
+          const penetration = bottom - p.y;
+          state.player.y -= penetration;
+          state.player.vy = 0;
+          state.player.grounded = true;
+        } else if (state.player.vy < 0) {
+          const penetration = (p.y + p.h) - worldBox.y;
+          state.player.y += penetration;
+          state.player.vy = 0;
+        }
+        worldBox = boxToWorld(solid);
+      }
+    }
+
+    function updateCamera() {
+      if (!state.player) return;
+      if (!state.cameraFollow) {
+        state.camera.x = 0;
+        state.camera.y = 0;
+        return;
+      }
+      state.camera.x += ((state.player.x - canvas.width / (2 * state.ppu)) - state.camera.x) * 0.12;
+      state.camera.y += (((state.player.y - 40) - canvas.height / (2 * state.ppu)) - state.camera.y) * 0.08;
+    }
+
+    function worldToScreen(x, y) {
+      return {
+        x: Math.round((x - state.camera.x) * state.ppu),
+        y: Math.round((y - state.camera.y) * state.ppu)
+      };
+    }
+
+    function drawBackground() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      grad.addColorStop(0, '#0b1020');
+      grad.addColorStop(1, '#05070b');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      ctx.globalAlpha = 0.15;
+      for (let x = -((state.camera.x * state.ppu) % (32 * state.ppu)); x < canvas.width; x += 32 * state.ppu) {
+        ctx.fillStyle = '#132038';
+        ctx.fillRect(x, 0, 1, canvas.height);
+      }
+      for (let y = -((state.camera.y * state.ppu) % (32 * state.ppu)); y < canvas.height; y += 32 * state.ppu) {
+        ctx.fillStyle = '#132038';
+        ctx.fillRect(0, y, canvas.width, 1);
+      }
+      ctx.restore();
+    }
+
+    function drawPlatforms() {
+      for (const p of state.platforms) {
+        const s = worldToScreen(p.x, p.y);
+        ctx.fillStyle = '#7c8798';
+        ctx.fillRect(s.x, s.y, p.w * state.ppu, p.h * state.ppu);
+        ctx.fillStyle = '#9aa6b8';
+        ctx.fillRect(s.x, s.y, p.w * state.ppu, Math.max(2, state.ppu));
+      }
+    }
+
+    function drawSprite() {
+      if (!state.player || !state.asset || !state.sheetImage || !state.sheetReady) return;
+      const frame = currentFrameEntry();
+      if (!frame) return;
+      const origin = getFrameOrigin(frame);
+      const sx = frame.x;
+      const sy = frame.y;
+      const sw = frame.w;
+      const sh = frame.h;
+
+      const screen = worldToScreen(state.player.x - origin.x, state.player.y - origin.y);
+      ctx.drawImage(state.sheetImage, sx, sy, sw, sh, screen.x, screen.y, sw * state.ppu, sh * state.ppu);
+
+      if (state.showOrigin) {
+        const o = worldToScreen(state.player.x, state.player.y);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(o.x - 8, o.y); ctx.lineTo(o.x + 8, o.y);
+        ctx.moveTo(o.x, o.y - 8); ctx.lineTo(o.x, o.y + 8);
+        ctx.stroke();
+      }
+    }
+
+    function drawDebugBoxes() {
+      if (!state.showDebug || !state.player || !state.asset) return;
+      const keys = ['solidBox','hurtBox','hitBox','sensor_foot','sensor_head','sensor_leftWall','sensor_rightWall'];
+      const frame = currentFrameEntry();
+
+      for (const key of keys) {
+        const box = getFrameBox(frame, key);
+        if (!box) continue;
+        const wb = boxToWorld(box);
+        const s = worldToScreen(wb.x, wb.y);
+        const color = rectColor(key);
+        ctx.fillStyle = hexToRgba(color, 0.18);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.fillRect(s.x, s.y, wb.w * state.ppu, wb.h * state.ppu);
+        ctx.strokeRect(s.x + 1, s.y + 1, Math.max(0, wb.w * state.ppu - 2), Math.max(0, wb.h * state.ppu - 2));
+      }
+    }
+
+    function updateHud() {
+      if (!state.player || !state.asset) {
+        ui.liveHud.textContent = 'load asset json + png';
+        return;
+      }
+      const frame = currentFrameEntry();
+      const solid = getFrameBox(frame, 'solidBox');
+      const foot = getFrameBox(frame, 'sensor_foot');
+      ui.liveHud.textContent =
+`asset        ${state.asset.id || 'unnamed'}
+anim         ${state.player.animation}
+frame        ${currentFrameIndex()}
+position     ${state.player.x.toFixed(2)}, ${state.player.y.toFixed(2)}
+velocity     ${state.player.vx.toFixed(2)}, ${state.player.vy.toFixed(2)}
+grounded     ${state.player.grounded}
+origin       ${JSON.stringify(getFrameOrigin(frame))}
+solidBox     ${solid ? JSON.stringify(solid) : 'none'}
+footSensor   ${foot ? JSON.stringify(foot) : 'none'}
+platforms    ${state.platforms.length}
+ppu          ${state.ppu}`;
+    }
+
+    function tick(timestamp) {
+      if (!state.lastTime) state.lastTime = timestamp;
+      let delta = timestamp - state.lastTime;
+      if (delta > 50) delta = 50;
+      state.lastTime = timestamp;
+
+      if (state.running) {
+        state.accumulator += delta;
+        while (state.accumulator >= state.fixedStepMs) {
+          updatePlayer();
+          updateAnimation(state.fixedStepMs);
+          updateCamera();
+          state.accumulator -= state.fixedStepMs;
+        }
+      }
+
+      drawBackground();
+      drawPlatforms();
+      drawSprite();
+      drawDebugBoxes();
+      updateHud();
+
+      requestAnimationFrame(tick);
+    }
+
+    function handleJsonLoad(file) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const data = JSON.parse(e.target.result);
+          state.asset = data;
+          ui.assetStatus.textContent = `${data.id || 'asset'} / json loaded`;
+          loadAnimationOptions();
+          if (!state.player) createPlayer();
+          else {
+            createPlayer();
+          }
+        } catch (err) {
+          alert('Invalid JSON file.');
+          console.error(err);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function handlePngLoad(file) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const img = new Image();
+        img.onload = () => {
+          state.sheetImage = img;
+          state.sheetReady = true;
+          ui.assetStatus.textContent = `${state.asset?.id || 'asset'} / png loaded`;
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    ui.loadJsonBtn.addEventListener('click', () => ui.jsonInput.click());
+    ui.loadPngBtn.addEventListener('click', () => ui.pngInput.click());
+
+    ui.jsonInput.addEventListener('change', e => {
+      const file = e.target.files?.[0];
+      if (file) handleJsonLoad(file);
+      e.target.value = '';
+    });
+
+    ui.pngInput.addEventListener('change', e => {
+      const file = e.target.files?.[0];
+      if (file) handlePngLoad(file);
+      e.target.value = '';
+    });
+
+    ui.applyAnimBtn.addEventListener('click', () => {
+      if (!state.player) return;
+      setPlayerAnimation(ui.animationSelect.value);
+    });
+
+    ui.playBtn.addEventListener('click', () => state.running = true);
+    ui.pauseBtn.addEventListener('click', () => state.running = false);
+    ui.resetBtn.addEventListener('click', resetPlayer);
+
+    ui.loopToggle.addEventListener('change', e => state.loopAnimation = e.target.checked);
+    ui.debugToggle.addEventListener('change', e => state.showDebug = e.target.checked);
+    ui.cameraFollowToggle.addEventListener('change', e => state.cameraFollow = e.target.checked);
+    ui.showOriginToggle.addEventListener('change', e => state.showOrigin = e.target.checked);
+
+    ui.ppuInput.addEventListener('input', e => state.ppu = clamp(Number(e.target.value) || 1, 1, 32));
+    ui.gravityInput.addEventListener('input', e => state.gravity = Number(e.target.value) || 0);
+    ui.moveAccelInput.addEventListener('input', e => state.moveAccel = Number(e.target.value) || 0);
+    ui.maxSpeedInput.addEventListener('input', e => state.maxSpeed = Number(e.target.value) || 0);
+    ui.jumpVelInput.addEventListener('input', e => state.jumpVel = Number(e.target.value) || 0);
+    ui.frictionInput.addEventListener('input', e => state.friction = clamp(Number(e.target.value) || 0, 0, 1));
+
+    ui.resetWorldBtn.addEventListener('click', makeDefaultWorld);
+    ui.addPlatformBtn.addEventListener('click', () => {
+      const baseX = (state.player?.x || 160) + 80;
+      const baseY = (state.player?.y || 60) + 20;
+      state.platforms.push({ x: baseX, y: baseY, w: 120, h: 16 });
+    });
+
+    window.addEventListener('keydown', e => {
+      state.keys[e.code] = true;
+      if (e.code === 'KeyR') resetPlayer();
+      if (e.code === 'KeyG') {
+        state.showDebug = !state.showDebug;
+        ui.debugToggle.checked = state.showDebug;
+      }
+      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+    });
+
+    window.addEventListener('keyup', e => {
+      state.keys[e.code] = false;
+    });
+
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>
