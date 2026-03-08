@@ -38,6 +38,25 @@
             background: #00ffcc; color: #000; border: 2px solid #fff; cursor: pointer; margin-top: 20px;
         }
         button:hover { background: #fff; color: #000; }
+
+        /* START MESSAGE STYLING */
+        #start-message {
+            position: fixed; top: 50%; left: 50%; 
+            transform: translate(-50%, -50%);
+            background: rgba(0, 20, 30, 0.9);
+            border: 2px solid #00ffcc;
+            padding: 30px;
+            color: #fff;
+            text-align: center;
+            z-index: 2000;
+            box-shadow: 0 0 30px #00ffcc;
+            pointer-events: auto;
+        }
+        #start-message kbd {
+            background: #00ffcc; color: #000;
+            padding: 2px 6px; border-radius: 3px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -64,6 +83,13 @@
         <h1 style="color:#fff">MISSION FAILED</h1>
         <p id="fail-reason" style="color:#fff">Quantum Drift Failed.</p>
         <button onclick="initLevel(true)">RESTART MISSION</button>
+    </div>
+
+    <div id="start-message">
+        <h1 style="font-size: 24px;">MISSION CONTROLS</h1>
+        <p>Rotate: <kbd>←</kbd> and <kbd>→</kbd> arrow keys</p>
+        <p>Press, hold, and release <kbd>SPACE BAR</kbd> to putt!</p>
+        <button onclick="dismissStartMessage()">BEGIN MISSION</button>
     </div>
 
     <canvas id="c"></canvas>
@@ -338,7 +364,7 @@ function draw(timestamp) {
             ctx.fill();
         }
     });
-    
+
     const world = [], cTX = Math.floor(cam.x/TILE_SIZE), cTZ = Math.floor(cam.z/TILE_SIZE);
     for(let z = cTZ - RENDER_MARGIN; z < cTZ + VIEW_DIST; z++) {
         for(let x = cTX - RENDER_MARGIN; x < cTX + RENDER_MARGIN; x++) {
@@ -527,6 +553,25 @@ window.onmousemove = e => { if(document.pointerLockElement) cam.yaw += e.movemen
 canvas.onclick = () => canvas.requestPointerLock();
 function resize() { dpr = window.devicePixelRatio || 1; w = canvas.width = window.innerWidth * dpr; h = canvas.height = window.innerHeight * dpr; }
 window.onresize = resize; resize(); initLevel(true); requestAnimationFrame(draw);
+
+let firstTimeLoading = true;
+
+function dismissStartMessage() {
+    document.getElementById('start-message').style.display = 'none';
+    firstTimeLoading = false;
+}
+
+// Modify your initLevel slightly so it handles the one-time visibility
+const originalInitLevel = initLevel;
+initLevel = function(resetAll) {
+    originalInitLevel(resetAll);
+    // If it's a sub-level (not resetAll), ensure the message stays gone
+    if (!resetAll || !firstTimeLoading) {
+        const msg = document.getElementById('start-message');
+        if (msg) msg.style.display = 'none';
+    }
+}
+
 </script>
 </body>
 </html>
