@@ -315,9 +315,59 @@ function draw(timestamp) {
             });
         }
     }
-    
+
+/* --- TEMPORARILY DISABLED FOR DIAGNOSTICS ---
+const goalBottomY = -240; 
+const beamBot = project({ x: goal.x, y: goalBottomY, z: goal.z });
+if (beamBot) {
+    world.push({
+        isBeam: true,
+        x: beamBot.x,
+        y: beamBot.y,
+        depth: beamBot.depth - 5.0, 
+        scale: beamBot.scale
+    });
+}
+----------------------------------------------- */
+
     world.sort((a,b) => b.depth - a.depth);
     world.forEach(p => {
+        // --- SAFETY GATE: This ONLY runs for the Beam ---
+        if (p.isBeam) {
+    const visibility = Math.max(0.3, 1 - (p.depth / (HORIZON * 2.5)));
+    const beamWidth = 40 * p.scale;
+    const screenTopY = -2000; 
+
+    // Lift the beam starting point by 5 pixels (relative to scale) 
+    // to clear the wireframe grid entirely.
+    const startY = p.y - (5 * p.scale);
+
+    const grad = ctx.createLinearGradient(p.x, startY, p.x, screenTopY);
+    // Use a 'Soft Base' gradient to hide the gap
+    grad.addColorStop(0, `rgba(0, 0, 0, 0)`); 
+    grad.addColorStop(0.02, `rgba(0, 255, 204, ${0.8 * visibility})`);
+    grad.addColorStop(0.5, `rgba(0, 255, 255, ${0.2 * visibility})`);
+    grad.addColorStop(1, `rgba(255, 255, 255, 0)`);
+
+    ctx.beginPath();
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = beamWidth;
+    ctx.moveTo(p.x, startY);
+    ctx.lineTo(p.x, screenTopY);
+    ctx.stroke();
+
+    // High-energy core
+    ctx.beginPath();
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 * visibility})`;
+    ctx.lineWidth = beamWidth / 5;
+    ctx.moveTo(p.x, startY);
+    ctx.lineTo(p.x, screenTopY);
+    ctx.stroke();
+    
+    return; 
+}
+
+        // --- EXISTING CODE: This remains 100% identical to your working version ---
         const fog = Math.max(0, 1 - (p.depth/HORIZON));
         let r, g, b, inner = goal.radius * 0.7, rim = goal.radius * 3.5;   
         if (p.goalDist < inner) { r=0; g=0; b=0; }
@@ -330,6 +380,42 @@ function draw(timestamp) {
         ctx.fillStyle = `rgba(${r*fog}, ${g*fog}, ${b*fog}, 1)`; ctx.strokeStyle = `rgba(0,255,200,${0.06*fog})`; 
         ctx.beginPath(); ctx.moveTo(p.pts[0].x, p.pts[0].y); ctx.lineTo(p.pts[1].x, p.pts[1].y); ctx.lineTo(p.pts[2].x, p.pts[2].y); ctx.closePath(); ctx.fill(); ctx.stroke();
     });
+
+    // --- PERMANENT FIX: ISOLATED BEAM RENDER PASS ---
+    const goalBottomY = -240;
+    const beamBot = project({ x: goal.x, y: goalBottomY, z: goal.z });
+
+    // Only draw if the goal is within a reasonable distance
+    if (beamBot && beamBot.depth < HORIZON * 2) {
+        const visibility = Math.max(0.3, 1 - (beamBot.depth / (HORIZON * 2.5)));
+        const beamWidth = Math.max(2, 40 * beamBot.scale);
+        const screenTopY = -2000; 
+
+        // Use Math.floor to lock the beam to the physical pixel grid
+        const drawX = Math.floor(beamBot.x);
+        const drawY = Math.floor(beamBot.y - (4 * beamBot.scale));
+
+        const grad = ctx.createLinearGradient(drawX, drawY, drawX, screenTopY);
+        grad.addColorStop(0, `rgba(0, 0, 0, 0)`); // Soft base to prevent clipping
+        grad.addColorStop(0.05, `rgba(0, 255, 204, ${0.8 * visibility})`);
+        grad.addColorStop(0.5, `rgba(0, 255, 255, ${0.2 * visibility})`);
+        grad.addColorStop(1, `rgba(255, 255, 255, 0)`);
+
+        ctx.beginPath();
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = beamWidth;
+        ctx.moveTo(drawX, drawY);
+        ctx.lineTo(drawX, screenTopY);
+        ctx.stroke();
+
+        // Stable High-Energy Core
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 * visibility})`;
+        ctx.lineWidth = Math.max(1, beamWidth / 5);
+        ctx.moveTo(drawX, drawY);
+        ctx.lineTo(drawX, screenTopY);
+        ctx.stroke();
+    }
 
     anomalies.forEach(a => {
         const aPos = project({x: a.x, y: getHeight(a.x/TILE_SIZE, a.z/TILE_SIZE)+10, z: a.z});
