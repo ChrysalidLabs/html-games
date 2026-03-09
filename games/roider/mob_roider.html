@@ -36,6 +36,59 @@
             max-height: 100%; 
             object-fit: contain; 
         }
+
+        /* --- ORIENTATION OVERLAY --- */
+        #rotate-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: var(--felt-dark);
+            z-index: 9999;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        /* Only show when the device is in portrait mode */
+        @media screen and (orientation: portrait) {
+            #rotate-overlay { display: flex; }
+            #game-wrapper { display: none; }
+        }
+
+        .phone-icon {
+            width: 50px; height: 80px;
+            border: 3px solid var(--ui-blue);
+            border-radius: 6px;
+            margin-bottom: 20px;
+            position: relative;
+            animation: rotate-anim 2s infinite ease-in-out;
+        }
+        .phone-icon::after {
+            content: '';
+            position: absolute;
+            bottom: 5px; left: 50%;
+            transform: translateX(-50%);
+            width: 6px; height: 6px;
+            background: var(--ui-blue);
+            border-radius: 50%;
+        }
+
+        @keyframes rotate-anim {
+            0% { transform: rotate(0deg); }
+            50% { transform: rotate(-90deg); }
+            100% { transform: rotate(-90deg); }
+        }
+
+        .rotate-text {
+            color: var(--ui-blue);
+            font-size: 16px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        /* UI Elements */
         .stats-display {
             position: absolute; top: 10px; left: 15px;
             color: var(--ui-blue);
@@ -69,6 +122,11 @@
 </head>
 <body>
 
+<div id="rotate-overlay">
+    <div class="phone-icon"></div>
+    <div class="rotate-text">PLEASE ROTATE TO LANDSCAPE</div>
+</div>
+
 <div id="game-wrapper">
     <div class="stats-display">
         SECTOR: <span id="sector-txt">0,0</span> | CARGO: <span id="orb-txt">0</span> / 10
@@ -84,7 +142,7 @@
 
 <script>
 /**
- * NEON WULF ENGINE v3.7 - MOBILE OPTIMIZED
+ * NEON WULF ENGINE v3.8 - MOBILE + ROTATION LOCK
  */
 
 const canvas = document.getElementById('gameCanvas');
@@ -456,13 +514,12 @@ function drawShip(x, y, angle, size, color, glow) {
     ctx.restore();
 }
 
-/** * MOBILE TOUCH & MOUSE HANDLERS 
+/** * MOBILE TOUCH & MOUSE HANDLERS
  */
 function getEventPos(e) {
     const r = canvas.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    // Scale the mouse position to the internal canvas resolution
     const scaleX = WIDTH / r.width;
     const scaleY = HEIGHT / r.height;
     return new Vector2((clientX - r.left) * scaleX, (clientY - r.top) * scaleY);
@@ -489,7 +546,6 @@ const handleEnd = (e) => {
     state.player.isDragging = false;
 };
 
-// Listeners
 canvas.addEventListener('touchstart', handleStart, { passive: false });
 window.addEventListener('touchmove', handleMove, { passive: false });
 window.addEventListener('touchend', handleEnd, { passive: false });
