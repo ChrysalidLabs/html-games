@@ -18,7 +18,7 @@
             overflow: hidden;
             display: flex; justify-content: center; align-items: center;
             height: 100vh;
-            touch-action: none; /* Prevents pull-to-refresh and scrolling */
+            touch-action: none;
         }
         #game-wrapper { 
             position: relative; 
@@ -50,50 +50,75 @@
             align-items: center;
             text-align: center;
         }
-
-        /* Only show when the device is in portrait mode */
         @media screen and (orientation: portrait) {
             #rotate-overlay { display: flex; }
             #game-wrapper { display: none; }
         }
 
+        /* --- LAUNCH INSTRUCTION OVERLAY --- */
+        #launch-instruction {
+            position: absolute;
+            bottom: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 20, 40, 0.8);
+            border: 1px solid var(--ui-blue);
+            padding: 20px;
+            border-radius: 8px;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            z-index: 50;
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+        }
+        .drag-anim {
+            width: 60px; height: 60px;
+            margin-bottom: 15px;
+            position: relative;
+        }
+        .finger {
+            width: 20px; height: 20px;
+            background: var(--ui-blue);
+            border-radius: 50%;
+            position: absolute;
+            left: 50%; top: 10%;
+            transform: translateX(-50%);
+            box-shadow: 0 0 10px var(--ui-blue);
+            animation: pull-back 1.5s infinite;
+        }
+        @keyframes pull-back {
+            0% { top: 10%; opacity: 0; }
+            20% { opacity: 1; }
+            70% { top: 80%; opacity: 1; }
+            100% { top: 80%; opacity: 0; }
+        }
+        .instr-text {
+            color: #fff; font-size: 14px; text-align: center;
+            line-height: 1.4; letter-spacing: 1px;
+        }
+        .highlight { color: var(--ui-blue); font-weight: bold; }
+
+        /* General UI */
         .phone-icon {
             width: 50px; height: 80px;
             border: 3px solid var(--ui-blue);
-            border-radius: 6px;
-            margin-bottom: 20px;
-            position: relative;
-            animation: rotate-anim 2s infinite ease-in-out;
+            border-radius: 6px; margin-bottom: 20px;
+            position: relative; animation: rotate-anim 2s infinite ease-in-out;
         }
         .phone-icon::after {
-            content: '';
-            position: absolute;
-            bottom: 5px; left: 50%;
-            transform: translateX(-50%);
-            width: 6px; height: 6px;
-            background: var(--ui-blue);
-            border-radius: 50%;
+            content: ''; position: absolute; bottom: 5px; left: 50%;
+            transform: translateX(-50%); width: 6px; height: 6px;
+            background: var(--ui-blue); border-radius: 50%;
         }
-
         @keyframes rotate-anim {
             0% { transform: rotate(0deg); }
             50% { transform: rotate(-90deg); }
             100% { transform: rotate(-90deg); }
         }
-
-        .rotate-text {
-            color: var(--ui-blue);
-            font-size: 16px;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-        }
-
-        /* UI Elements */
         .stats-display {
             position: absolute; top: 10px; left: 15px;
-            color: var(--ui-blue);
-            font-size: 12px; letter-spacing: 1px; pointer-events: none;
-            z-index: 10;
+            color: var(--ui-blue); font-size: 12px; letter-spacing: 1px; z-index: 10;
         }
         .timer-display {
             position: absolute; top: 10px; right: 15px;
@@ -128,6 +153,13 @@
 </div>
 
 <div id="game-wrapper">
+    <div id="launch-instruction">
+        <div class="drag-anim"><div class="finger"></div></div>
+        <div class="instr-text">
+            PULL BACK TO SLINGSHOT<br>
+            <span class="highlight">LONGER DRAG = MORE VELOCITY</span>
+        </div>
+    </div>
     <div class="stats-display">
         SECTOR: <span id="sector-txt">0,0</span> | CARGO: <span id="orb-txt">0</span> / 10
     </div>
@@ -142,7 +174,7 @@
 
 <script>
 /**
- * NEON WULF ENGINE v3.8 - MOBILE + ROTATION LOCK
+ * NEON WULF ENGINE v3.9 - MOBILE + ROTATION LOCK + GUIDED LAUNCH
  */
 
 const canvas = document.getElementById('gameCanvas');
@@ -199,27 +231,19 @@ class Particle {
         this.life -= 0.02;
     }
     draw(ctx) {
-        ctx.fillStyle = this.color;
-        ctx.globalAlpha = this.life;
-        ctx.fillRect(this.pos.x, this.pos.y, 3, 3);
-        ctx.globalAlpha = 1;
+        ctx.fillStyle = this.color; ctx.globalAlpha = this.life;
+        ctx.fillRect(this.pos.x, this.pos.y, 3, 3); ctx.globalAlpha = 1;
     }
 }
 
 class RippleGrid {
-    constructor() {
-        this.ripples = [];
-        this.spacing = 55;
-    }
-    addDisturbance(x, y) {
-        this.ripples.push({x, y, r: 0, v: 12, life: 1});
-    }
+    constructor() { this.ripples = []; this.spacing = 55; }
+    addDisturbance(x, y) { this.ripples.push({x, y, r: 0, v: 12, life: 1}); }
     draw(ctx, time) {
         this.ripples.forEach((rp, i) => {
             rp.r += rp.v; rp.life -= 0.01;
             if(rp.life <= 0) this.ripples.splice(i, 1);
         });
-
         for (let x = 0; x <= WIDTH; x += this.spacing) {
             ctx.beginPath();
             for (let y = 0; y <= HEIGHT; y += 20) {
@@ -293,8 +317,7 @@ class Enemy {
     constructor() {
         this.pos = new Vector2(100 + Math.random()*(WIDTH-200), 100 + Math.random()*(HEIGHT-200));
         this.vel = new Vector2((Math.random()-0.5)*3, (Math.random()-0.5)*3);
-        this.radius = 35; 
-        this.angle3D = { x: Math.random()*6, y: Math.random()*6 };
+        this.radius = 35; this.angle3D = { x: Math.random()*6, y: Math.random()*6 };
         this.rotSpeed = { x: (Math.random()-0.5)*0.03, y: (Math.random()-0.5)*0.03 };
         this.vertices = [{x:1,y:0,z:0},{x:-1,y:0,z:0},{x:0,y:1,z:0},{x:0,y:-1,z:0},{x:0,y:0,z:1},{x:0,y:0,z:-1}];
     }
@@ -325,19 +348,13 @@ class Enemy {
 
 class StationNode {
     constructor(x, y, size) {
-        this.relX = x; this.relY = y;
-        this.size = size;
-        this.rotX = Math.random() * 6.28;
-        this.rotY = Math.random() * 6.28;
-        this.rotVX = (Math.random()-0.5)*0.015;
-        this.rotVY = (Math.random()-0.5)*0.015;
+        this.relX = x; this.relY = y; this.size = size;
+        this.rotX = Math.random() * 6.28; this.rotY = Math.random() * 6.28;
+        this.rotVX = (Math.random()-0.5)*0.015; this.rotVY = (Math.random()-0.5)*0.015;
     }
     draw(ctx) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.strokeStyle = 'rgba(0, 212, 255, 0.15)';
-        ctx.moveTo(0, 0); ctx.lineTo(this.relX, this.relY);
-        ctx.stroke();
+        ctx.save(); ctx.beginPath(); ctx.strokeStyle = 'rgba(0, 212, 255, 0.15)';
+        ctx.moveTo(0, 0); ctx.lineTo(this.relX, this.relY); ctx.stroke();
         ctx.translate(this.relX, this.relY);
         this.rotX += this.rotVX; this.rotY += this.rotVY;
         const proj = DodecPoints.map(p => {
@@ -350,9 +367,7 @@ class StationNode {
         proj.forEach((p1, i) => {
             proj.forEach((p2, j) => {
                 const d = Math.hypot(p1.x-p2.x, p1.y-p2.y);
-                if (d < this.size * 1.3 && d > 1) {
-                    ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-                }
+                if (d < this.size * 1.3 && d > 1) { ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke(); }
             });
         });
         ctx.restore();
@@ -363,12 +378,12 @@ let state = {
     player: { pos: new Vector2(WIDTH/2, HEIGHT/2), vel: new Vector2(0, 0), angle: 0, radius: 16, options: 0, trail: [], totalTravelDist: 0, currentSpacing: PHYSICS.BASE_SPACING, isDragging: false, dragPoint: new Vector2(0, 0), currentMouse: new Vector2(0, 0) },
     enemies: [], stars: new Starfield(), grid: new RippleGrid(), particles: [],
     stationNodes: [new StationNode(0, 0, 45)],
-    sector: { x: 0, y: 0 }, delivered: 0, timeLeft: 60, active: true, shake: 0, time: 0 
+    sector: { x: 0, y: 0 }, delivered: 0, timeLeft: 60, active: true, shake: 0, time: 0,
+    firstDrag: true
 };
 
 function initSector() {
-    state.enemies = [];
-    if (state.sector.x === 0 && state.sector.y === 0) return;
+    state.enemies = []; if (state.sector.x === 0 && state.sector.y === 0) return;
     const count = 3 + (Math.abs(state.sector.x + state.sector.y) % 4);
     for (let i = 0; i < count; i++) state.enemies.push(new Enemy());
     document.getElementById('sector-txt').innerText = `${state.sector.x},${state.sector.y}`;
@@ -377,7 +392,6 @@ function initSector() {
 function resolveBoundaries() {
     const p = state.player;
     let offX = 0, offY = 0;
-
     if (p.pos.x < 0) {
         if (state.sector.x > -PHYSICS.GRID_LIMIT) { offX = WIDTH; state.sector.x--; }
         else { p.pos.x = 0; p.vel.x *= -0.5; state.shake = 5; }
@@ -385,7 +399,6 @@ function resolveBoundaries() {
         if (state.sector.x < PHYSICS.GRID_LIMIT) { offX = -WIDTH; state.sector.x++; }
         else { p.pos.x = WIDTH; p.vel.x *= -0.5; state.shake = 5; }
     }
-
     if (p.pos.y < 0) {
         if (state.sector.y > -PHYSICS.GRID_LIMIT) { offY = HEIGHT; state.sector.y--; }
         else { p.pos.y = 0; p.vel.y *= -0.5; state.shake = 5; }
@@ -393,13 +406,11 @@ function resolveBoundaries() {
         if (state.sector.y < PHYSICS.GRID_LIMIT) { offY = -HEIGHT; state.sector.y++; }
         else { p.pos.y = HEIGHT; p.vel.y *= -0.5; state.shake = 5; }
     }
-
     if (offX !== 0 || offY !== 0) {
         p.pos.x += offX; p.pos.y += offY;
         p.trail.forEach(pt => { pt.pos.x += offX; pt.pos.y += offY; });
         initSector();
     }
-
     state.enemies.forEach((orb, i) => {
         if (Vector2.dist(p.pos, orb.pos) < p.radius + orb.radius) {
             if (Vector2.mag(p.vel) > PHYSICS.SMASH_THRESHOLD) {
@@ -410,7 +421,6 @@ function resolveBoundaries() {
             } else { p.vel = Vector2.mul(Vector2.normalize(Vector2.sub(p.pos, orb.pos)), 6); state.shake = 4; }
         }
     });
-
     if (state.sector.x === 0 && state.sector.y === 0 && Vector2.dist(p.pos, new Vector2(WIDTH/2, HEIGHT/2)) < 120 && state.player.options > 0) {
         state.delivered += state.player.options;
         if(window.navigator.vibrate) window.navigator.vibrate([20, 50, 20]);
@@ -423,10 +433,8 @@ function resolveBoundaries() {
         state.player.options = 0; state.shake = 10;
         document.getElementById('orb-txt').innerText = state.delivered;
         document.getElementById('progress-fill').style.width = Math.min(state.delivered/PHYSICS.GOAL*100, 100) + "%";
-        
         if(state.delivered >= PHYSICS.GOAL) {
-            state.active = false;
-            document.getElementById('over-msg').innerText = "CITADEL STABILIZED";
+            state.active = false; document.getElementById('over-msg').innerText = "CITADEL STABILIZED";
             document.getElementById('over-msg').style.color = "var(--neon-green)";
             document.getElementById('game-over').style.display = 'flex';
         }
@@ -434,8 +442,7 @@ function resolveBoundaries() {
 }
 
 function getPointAtDistance(targetDist) {
-    const trail = state.player.trail;
-    if (trail.length < 2) return trail[0];
+    const trail = state.player.trail; if (trail.length < 2) return trail[0];
     for (let i = 0; i < trail.length - 1; i++) {
         const p1 = trail[i]; const p2 = trail[i+1];
         if (p1.totalDist >= targetDist && p2.totalDist <= targetDist) {
@@ -452,18 +459,12 @@ function loop() {
     state.timeLeft -= 1/60;
     document.getElementById('timer-txt').innerText = Math.max(0, state.timeLeft).toFixed(2);
     if(state.timeLeft <= 0) { state.active = false; document.getElementById('game-over').style.display = 'flex'; return; }
-
-    const p = state.player;
-    ctx.fillStyle = '#000'; ctx.fillRect(0,0,WIDTH,HEIGHT);
-    state.grid.draw(ctx, state.time);
-    state.stars.draw(ctx, p.vel);
-
+    const p = state.player; ctx.fillStyle = '#000'; ctx.fillRect(0,0,WIDTH,HEIGHT);
+    state.grid.draw(ctx, state.time); state.stars.draw(ctx, p.vel);
     ctx.save();
     if (state.shake > 0) { ctx.translate((Math.random()-0.5)*state.shake, (Math.random()-0.5)*state.shake); state.shake *= 0.9; }
-    p.pos.x += p.vel.x; p.pos.y += p.vel.y;
-    p.vel.x *= PHYSICS.FRICTION; p.vel.y *= PHYSICS.FRICTION;
+    p.pos.x += p.vel.x; p.pos.y += p.vel.y; p.vel.x *= PHYSICS.FRICTION; p.vel.y *= PHYSICS.FRICTION;
     if (Vector2.mag(p.vel) > 0.2) p.angle = Vector2.angle(p.vel);
-    
     const lastPoint = p.trail[0];
     if (!lastPoint) { p.trail.unshift({ pos: new Vector2(p.pos.x, p.pos.y), angle: p.angle, totalDist: 0 }); }
     else if (Vector2.dist(p.pos, lastPoint.pos) > 1) { 
@@ -471,35 +472,27 @@ function loop() {
         p.trail.unshift({ pos: new Vector2(p.pos.x, p.pos.y), angle: p.angle, totalDist: p.totalTravelDist });
         if (p.trail.length > 500) p.trail.pop();
     }
-
     resolveBoundaries();
-
     if (state.sector.x === 0 && state.sector.y === 0) {
         ctx.save(); ctx.translate(WIDTH/2, HEIGHT/2);
-        state.stationNodes.forEach(n => n.draw(ctx));
-        ctx.restore();
+        state.stationNodes.forEach(n => n.draw(ctx)); ctx.restore();
     }
-
     state.enemies.forEach(en => { en.update(); en.draw(ctx, state.time); });
     state.particles.forEach((pt, i) => {
-        pt.update(); pt.draw(ctx);
-        if(pt.life <= 0) state.particles.splice(i, 1);
+        pt.update(); pt.draw(ctx); if(pt.life <= 0) state.particles.splice(i, 1);
     });
-
     const speed = Vector2.mag(p.vel);
     p.currentSpacing = p.currentSpacing * 0.94 + (PHYSICS.BASE_SPACING + (speed * PHYSICS.STRETCH_FACTOR)) * 0.06;
     for (let i = 1; i <= p.options; i++) {
         const data = getPointAtDistance(p.totalTravelDist - (i * p.currentSpacing));
         if (data && data.pos) drawShip(data.pos.x + Math.sin(state.time + i) * PHYSICS.JITTER_STRENGTH, data.pos.y + Math.cos(state.time * 0.8 + i) * PHYSICS.JITTER_STRENGTH, data.angle, 9, '#00d4ff', 8);
     }
-
     if (p.isDragging) {
         const pullVec = Vector2.sub(p.dragPoint, p.currentMouse);
         const aimDir = Vector2.normalize(pullVec);
         const dist = Math.min(Vector2.mag(pullVec) * 1.5, PHYSICS.MAX_DRAG);
         ctx.beginPath(); ctx.strokeStyle = 'rgba(0, 212, 255, 0.6)'; ctx.setLineDash([5,5]); ctx.lineWidth = 3;
-        ctx.moveTo(p.pos.x, p.pos.y);
-        ctx.lineTo(p.pos.x + aimDir.x * dist, p.pos.y + aimDir.y * dist); ctx.stroke(); ctx.setLineDash([]);
+        ctx.moveTo(p.pos.x, p.pos.y); ctx.lineTo(p.pos.x + aimDir.x * dist, p.pos.y + aimDir.y * dist); ctx.stroke(); ctx.setLineDash([]);
     }
     drawShip(p.pos.x, p.pos.y, p.angle, 18, '#fff', Vector2.mag(p.vel) > PHYSICS.SMASH_THRESHOLD ? 20 : 0);
     ctx.restore();
@@ -507,21 +500,18 @@ function loop() {
 }
 
 function drawShip(x, y, angle, size, color, glow) {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
-    ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(angle); ctx.strokeStyle = color; ctx.lineWidth = 2;
     if (glow > 0) { ctx.shadowBlur = glow; ctx.shadowColor = color; }
     ctx.beginPath(); ctx.moveTo(size, 0); ctx.lineTo(-size*0.8, -size*0.7); ctx.lineTo(-size*0.4, 0); ctx.lineTo(-size*0.8, size*0.7); ctx.closePath(); ctx.stroke();
     ctx.restore();
 }
 
-/** * MOBILE TOUCH & MOUSE HANDLERS
- */
+/** * MOBILE TOUCH HANDLERS */
 function getEventPos(e) {
     const r = canvas.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const scaleX = WIDTH / r.width;
-    const scaleY = HEIGHT / r.height;
+    const scaleX = WIDTH / r.width; const scaleY = HEIGHT / r.height;
     return new Vector2((clientX - r.left) * scaleX, (clientY - r.top) * scaleY);
 }
 
@@ -544,12 +534,18 @@ const handleEnd = (e) => {
     const power = Math.min(Vector2.mag(force) * 0.22, 25);
     state.player.vel = Vector2.mul(Vector2.normalize(force), power);
     state.player.isDragging = false;
+    
+    // Auto-remove instruction after first shot
+    if(state.firstDrag) {
+        state.firstDrag = false;
+        const ins = document.getElementById('launch-instruction');
+        if(ins) ins.remove();
+    }
 };
 
 canvas.addEventListener('touchstart', handleStart, { passive: false });
 window.addEventListener('touchmove', handleMove, { passive: false });
 window.addEventListener('touchend', handleEnd, { passive: false });
-
 canvas.addEventListener('mousedown', handleStart);
 window.addEventListener('mousemove', handleMove);
 window.addEventListener('mouseup', handleEnd);
