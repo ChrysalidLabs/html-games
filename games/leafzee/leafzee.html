@@ -1,0 +1,1355 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { margin: 0; overflow: hidden; background: #0b1a2d; font-family: 'Courier New', monospace; }
+        #hint { position: absolute; bottom: 20px; width: 100%; text-align: center; color: #4a6fa5; pointer-events: none; z-index: 10; font-size: 11px; letter-spacing: 3px;}
+        
+        /* Level Meter Container */
+        #meter-container { 
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            width: 60%; height: 8px; background: rgba(74, 111, 165, 0.2);
+            border: 1px solid rgba(122, 178, 255, 0.4); z-index: 10;
+        }
+        /* Level Meter Fill */
+        #meter-fill {
+            width: 0%; height: 100%; background: #7ab2ff;
+            box-shadow: 0 0 20px rgba(122, 178, 255, 0.8);
+            transition: width 0.3s ease-out;
+        }
+        #meter-label {
+            position: absolute; top: -15px; width: 100%; text-align: center;
+            color: #7ab2ff; font-size: 9px; letter-spacing: 2px;
+            text-shadow: 0 0 8px rgba(122, 178, 255, 0.5);
+        }
+        /* CHANGE: Move the target indicator below the progress bar */
+        #meter-target {
+            position: absolute; left: 50%; top: 9px; width: 0; height: 0;
+            border-left: 7px solid transparent; border-right: 7px solid transparent;
+            border-bottom: 12px solid #ffd86b;
+            transform: translateX(-50%);
+            filter: drop-shadow(0 0 6px rgba(255, 216, 107, 0.9));
+            z-index: 12;
+            pointer-events: none;
+        }
+        #meter-target::after {
+            content: 'TARGET';
+            /* CHANGE: Drop the TARGET text 10px lower under the marker triangle */
+            position: absolute; left: 50%; top: 18px; transform: translateX(-50%);
+            color: #ffd86b; font-size: 8px; letter-spacing: 1px; white-space: nowrap;
+            text-shadow: 0 0 6px rgba(255, 216, 107, 0.7);
+        }
+        #level-dialog {
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            min-width: 280px; padding: 18px 22px; text-align: center;
+            background: rgba(8, 14, 26, 0.92); color: #dfeeff;
+            border: 1px solid rgba(122, 178, 255, 0.5);
+            box-shadow: 0 0 30px rgba(122, 178, 255, 0.22);
+            z-index: 30; display: none;
+        }
+        #level-dialog.show { display: block; }
+        #level-dialog-title { color: #ffd86b; font-size: 18px; letter-spacing: 2px; margin-bottom: 8px; }
+        #level-dialog-body { font-size: 11px; letter-spacing: 1px; color: #b9d8ff; margin-bottom: 14px; }
+        #level-dialog button {
+            background: #7ab2ff; color: #08121e; border: none; padding: 10px 16px;
+            font-family: 'Courier New', monospace; font-weight: bold; letter-spacing: 1px; cursor: pointer;
+            box-shadow: 0 0 14px rgba(122, 178, 255, 0.35);
+        }
+
+        /* CHANGE: Level-start modal sequence that lets canopy growth render before gameplay begins */
+        #start-dialog {
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            min-width: 320px; padding: 18px 24px; text-align: center;
+            background: rgba(8, 14, 26, 0.90); color: #dfeeff;
+            border: 1px solid rgba(122, 178, 255, 0.52);
+            box-shadow: 0 0 36px rgba(122, 178, 255, 0.24);
+            z-index: 34; display: none; pointer-events: none;
+        }
+        #start-dialog.show { display: block; }
+        #start-dialog-title { color: #ffd86b; font-size: 16px; letter-spacing: 2px; margin-bottom: 8px; }
+        #start-dialog-body { font-size: 11px; letter-spacing: 1px; color: #b9d8ff; }
+        #start-dialog.ready #start-dialog-title {
+            color: #7ab2ff;
+            text-shadow: 0 0 10px rgba(122, 178, 255, 0.42);
+        }
+
+
+
+        /* CHANGE: One-time delayed help prompt shown if the player waits too long to start the level */
+        #start-help {
+            position: absolute; left: 50%; bottom: 78px; transform: translateX(-50%);
+            max-width: min(78vw, 720px); padding: 10px 14px; text-align: center;
+            color: #ffe69f; font-size: 12px; line-height: 1.45; letter-spacing: 1px;
+            background: rgba(8, 14, 26, 0.78);
+            border: 1px solid rgba(255, 216, 107, 0.48);
+            box-shadow: 0 0 18px rgba(255, 216, 107, 0.16);
+            text-shadow: 0 0 8px rgba(255, 216, 107, 0.42);
+            z-index: 33; display: none; pointer-events: none;
+        }
+        #start-help.show { display: block; }
+
+    </style>
+</head>
+<body>
+    <div id="meter-container">
+        <div id="meter-label">LEVEL 1 • ABSORPTION VOLUME</div>
+        <div id="meter-target"></div>
+        <div id="meter-fill"></div>
+    </div>
+    <div id="hint">BLOW LEAVES INTO THE VACUUM CONDUIT | ESC TO RESET | SPACE FOR BREEZE</div>
+    <div id="level-dialog">
+        <div id="level-dialog-title">LEVEL COMPLETE</div>
+        <div id="level-dialog-body">Target reached. Proceed to Level 2 with one additional obstacle block.</div>
+        <button id="next-level-btn">START LEVEL 2</button>
+    </div>
+
+    <!-- CHANGE: Level-start modal sequence for canopy generation and Space-to-start gating -->
+    <div id="start-dialog" class="show">
+        <div id="start-dialog-title">Growing Trees &gt;&gt; Generating Canopy</div>
+        <div id="start-dialog-body">Please wait while the level canopy finishes growing.</div>
+    </div>
+    <!-- CHANGE: One-time delayed help prompt if the player waits too long to start shaking the canopy -->
+    <div id="start-help">Press Space To Shake and Get your Leaves to the right of the screen, click and drag in the direction you want to gust!</div>
+    <canvas id="canvas"></canvas>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const meterContainerEl = document.getElementById('meter-container');
+const meterFillEl = document.getElementById('meter-fill');
+const meterLabelEl = document.getElementById('meter-label');
+const levelDialogEl = document.getElementById('level-dialog');
+const nextLevelBtnEl = document.getElementById('next-level-btn');
+/* CHANGE: Startup / level-start modal references */
+const startDialogEl = document.getElementById('start-dialog');
+const startDialogTitleEl = document.getElementById('start-dialog-title');
+const startDialogBodyEl = document.getElementById('start-dialog-body');
+/* CHANGE: Delayed one-time help prompt reference */
+const startHelpEl = document.getElementById('start-help');
+
+const LEVEL_TARGET_PERCENT = 50;
+const BASE_OBSTACLE_COUNT = 8;
+const MAX_LEVEL = 10;
+/* CHANGE: Separate canopy preview timing from the live gameplay timer so rendering never blocks */
+const INTRO_CANOPY_COMPLETE_TIME = 11.8;
+const INTRO_GROWTH_STEP = 0.18;
+
+let width, height, horizon;
+let treeScene = [];
+let terrainPoints = [];
+let distantHorizon = []; 
+let globalTime = 0;
+let fallingLeaves = [];
+let totalPossibleLeaves = 0;
+let leavesAbsorbed = 0;
+let pipeBulges = [];
+let meterBurstCharge = 0;
+let obstacleBlocks = [];
+let smokePuffs = [];
+/* CHANGE: Level 5+ fire-drip hazards */
+let fireDrips = [];
+let groundFires = [];
+let currentLevel = 1;
+let levelCompleteShown = false;
+/* CHANGE: Keep startup gating separate from rendering so the canopy can always grow visibly before play begins */
+let levelStarted = false;
+let startSequencePhase = 'growing';
+let canopyPreviewTime = 0;
+/* CHANGE: Track one-time delayed start help per level */
+let startReadyWaitTime = 0;
+let startHelpShownThisLevel = false;
+let startHelpFlashTime = 0;
+/* CHANGE: Track whether the player has actually used the level controls after the start dialog closes */
+let playerHasShakenThisLevel = false;
+/* CHANGE: Track time since gameplay actually began so the delayed shake hint starts after the dialog is gone */
+let postStartNoShakeTime = 0;
+
+let camera = { x: 0, y: 0, scale: 1 };
+let targetCamera = { x: 0, y: 0, scale: 1 };
+
+let windGust = 0;      
+let windVelocity = 0;  
+const springK = 0.035; 
+const friction = 0.94; 
+
+let mouseWind = { x: 0, y: 0, vx: 0, vy: 0, active: false };
+/* CHANGE: Pointer AOE indicator constants reduced so the ring is less intrusive but still visible outside a touch finger */
+const MOUSE_WIND_AOE_SOFT_RADIUS = 92;
+const MOUSE_WIND_AOE_POP_RADIUS = 36;
+/* CHANGE: AOE visibility boosted so it stays readable even over bright blocks and fire */
+const MOUSE_WIND_AOE_BRIGHTNESS = 1.52;
+/* CHANGE: Pointer AOE directional flex tuning increased so the ring deformation is more pronounced */
+/* CHANGE: Increase the baseline deformation substantially so the AOE reads like a heavy pushed blob rather than a subtle ring */
+const MOUSE_WIND_AOE_BULGE = 42;
+/* CHANGE: Extra speed response so faster drag creates a more pronounced but still smooth boundary distortion */
+/* CHANGE: Faster drags still increase distortion, but reach the strong blob state sooner so the effect feels weighty */
+const MOUSE_WIND_AOE_SPEED_FOR_MAX_BULGE = 8.2;
+const MOUSE_WIND_AOE_MIN_DIR = 0.18;
+/* CHANGE: Elastic AOE visual state so the boundary behaves like fluid oil instead of snapping back instantly */
+/* CHANGE: Make the visual recovery much slower and heavier so the AOE behaves like very viscous mercury instead of springy rubber */
+const MOUSE_WIND_AOE_RETURN_DAMPING = 0.94;
+const MOUSE_WIND_AOE_SPRING = 0.042;
+const MOUSE_WIND_AOE_DIRECTION_LERP = 0.065;
+const MOUSE_WIND_AOE_IDLE_HOLD = 0.988;
+const MOUSE_WIND_AOE_TARGET_LERP = 0.055;
+/* CHANGE: Fade the mercury AOE out gradually after release instead of turning it off instantly */
+const MOUSE_WIND_AOE_FADE_LERP = 0.075;
+const MOUSE_WIND_AOE_MIN_VISIBLE_ALPHA = 0.025;
+let aoeVisual = { dirX: 0, dirY: -1, bulge: 12, bulgeVel: 0, wobble: 0, wobbleVel: 0, targetBulge: 12, smear: 0, smearVel: 0, alpha: 0, pulseHold: 0 };
+let lastMouse = { x: 0, y: 0 };
+
+function resize() {
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
+    horizon = height * 0.55; 
+    generateTerrain();
+    generateDistantHorizon();
+}
+
+function generateDistantHorizon() {
+    distantHorizon = [];
+    let segments = 30;
+    for (let i = 0; i <= segments; i++) {
+        distantHorizon.push({
+            x: (i / segments) * width,
+            y: (horizon - 20) + (Math.random() - 0.5) * 40 
+        });
+    }
+}
+
+function generateTerrain() {
+    terrainPoints = [];
+    for (let z = 0; z <= 1.1; z += 0.1) {
+        let layer = [];
+        let segments = 20;
+        let yBase = horizon + (z * (height - horizon) * 0.8);
+        for (let i = 0; i <= segments; i++) {
+            layer.push({
+                x: (i / segments) * width,
+                y: yBase + (Math.random() - 0.5) * (20 * z)
+            });
+        }
+        terrainPoints.push({z, points: layer});
+    }
+}
+
+/* CHANGE: Terrain sampling for Level 5+ fire-drip hazards */
+function sampleTerrainY(layerIndex, x) {
+    const layer = terrainPoints[Math.max(0, Math.min(terrainPoints.length - 1, layerIndex))];
+    const pts = layer.points;
+    if (!pts || pts.length < 2) return height - 40;
+    const clampedX = Math.max(0, Math.min(width, x));
+    for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], b = pts[i];
+        if (clampedX <= b.x) {
+            const span = Math.max(1, b.x - a.x);
+            const t = (clampedX - a.x) / span;
+            return a.y + (b.y - a.y) * t;
+        }
+    }
+    return pts[pts.length - 1].y;
+}
+
+function getBarkColor(depth, z) {
+    const ratio = (8 - depth) / 8; 
+    const r = Math.floor(40 * (1 - ratio) + 30 * ratio);
+    const g = Math.floor(30 * (1 - ratio) + 60 * ratio);
+    const b = Math.floor(20 * (1 - ratio) + 20 * ratio);
+    return `rgba(${r},${g},${b},${0.3 + (z * 0.7)})`;
+}
+
+function countLeaves(node) {
+    let count = node.hasLeaf ? 1 : 0;
+    node.children.forEach(c => count += countLeaves(c));
+    return count;
+}
+
+function createNode(x, y, angle, length, depth, z) {
+    const segments = 5;
+    let points = [{x, y}];
+    let curX = x, curY = y, curAngle = angle;
+    for (let i = 0; i < segments; i++) {
+        curAngle += (Math.random() - 0.5) * 0.18;
+        curX += Math.cos(curAngle) * (length / segments);
+        curY += Math.sin(curAngle) * (length / segments);
+        points.push({x: curX, y: curY});
+    }
+    const children = [];
+    if (depth > 0) {
+        const num = Math.random() > 0.75 ? 3 : 2;
+        for (let i = 0; i < num; i++) {
+            children.push(createNode(curX, curY, curAngle + (Math.random() - 0.5) * 1.3, length * (0.68 + Math.random() * 0.1), depth - 1, z));
+        }
+    }
+    return { points, children, depth, z, startTime: (9 - depth) * 1.2, hasLeaf: depth === 0 };
+}
+
+function drawLeaf(l, time, solarTone) {
+    const flutter = Math.sin(time * 6.0 + l.z * 10.0) * 0.15;
+    const leafAngle = l.angle + (l.isFalling ? l.rotation : flutter);
+    let finalScale = l.scale * (0.3 + (1 - l.z) * 0.7); 
+    
+    // Shrink if in pipe
+    if (l.pumpState) finalScale *= 0.4;
+
+    const depthAlpha = 0.4 + (l.z * 0.6);
+    const r = Math.min(255, solarTone.r + (l.z * 40));
+    const g = Math.min(255, solarTone.g + (l.z * 20));
+    const b = Math.min(255, solarTone.b + (l.z * 60));
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${depthAlpha})`;
+    ctx.beginPath();
+    const leafL = 16 * finalScale;
+    const leafW = 7 * finalScale;
+    ctx.moveTo(l.x, l.y);
+    for (let i = 0; i <= 1.0; i += 0.3) {
+        const lx = l.x + Math.cos(leafAngle) * leafL * i;
+        const ly = l.y + Math.sin(leafAngle) * leafL * i;
+        const perp = Math.sin(i * Math.PI) * leafW;
+        ctx.lineTo(lx + Math.cos(leafAngle - 1.57) * perp, ly + Math.sin(leafAngle - 1.57) * perp);
+    }
+    for (let i = 1; i >= 0; i -= 0.3) {
+        const lx = l.x + Math.cos(leafAngle) * leafL * i;
+        const ly = l.y + Math.sin(leafAngle) * leafL * i;
+        const perp = Math.sin(i * Math.PI) * leafW;
+        ctx.lineTo(lx + Math.cos(leafAngle + 1.57) * perp, ly + Math.sin(leafAngle + 1.57) * perp);
+    }
+    ctx.fill();
+}
+
+function drawNode(node, time, parentX, parentY, accAngle, depthScale, solarTone, z, currentLeafList) {
+    const localTime = Math.max(0, time - node.startTime);
+    if (localTime <= 0) return;
+    const flex = (10 - node.depth) * 0.01 * depthScale;
+    const bendAngle = windGust * flex;
+    const sway = Math.sin(time * 0.8 + node.startTime) * (0.02 * (10 - node.depth));
+    const currentAngle = accAngle + sway + bendAngle;
+    let progress = Math.min(1, localTime * 1.2);
+    ctx.beginPath();
+    ctx.lineWidth = Math.max(0.4, (node.depth * 0.9) * depthScale);
+    ctx.strokeStyle = getBarkColor(node.depth, z);
+    ctx.lineCap = 'round';
+    let curX = parentX, curY = parentY;
+    ctx.moveTo(curX, curY);
+    for (let i = 1; i < node.points.length; i++) {
+        const p = node.points[i], prevP = node.points[i-1];
+        const segAngle = Math.atan2(p.y - prevP.y, p.x - prevP.x) + sway + bendAngle;
+        const segLen = Math.sqrt(Math.pow(p.x-prevP.x,2)+Math.pow(p.y-prevP.y,2)) * depthScale;
+        if (i <= progress * (node.points.length - 1)) {
+            curX += Math.cos(segAngle) * segLen;
+            curY += Math.sin(segAngle) * segLen;
+            ctx.lineTo(curX, curY);
+        } else {
+            const part = (progress * (node.points.length-1)) - (i-1);
+            curX += Math.cos(segAngle) * (segLen * part);
+            curY += Math.sin(segAngle) * (segLen * part);
+            ctx.lineTo(curX, curY);
+            break;
+        }
+    }
+    ctx.stroke();
+    if (progress >= 0.9) {
+        if (node.hasLeaf) {
+            if (Math.abs(windGust) >= 0.1 && Math.random() > 0.985) {
+                const groundY = horizon + (z * (height - horizon) * 0.85);
+                fallingLeaves.push({
+                    x: curX, y: curY, angle: currentAngle, scale: depthScale, z: z,
+                    vx: windGust * 0.5 + (Math.random() - 0.5) * 0.5, vy: (Math.random() * 0.5),
+                    rotation: 0, vr: (Math.random() - 0.5) * 0.2,
+                    isFalling: true, grounded: false, settleY: groundY + (Math.random() - 0.5) * (20 * z),
+                    pumpState: 0 // 0: field, 1: rising, 2: bridging
+                });
+                node.hasLeaf = false; 
+            } else {
+                currentLeafList.push({ x: curX, y: curY, angle: currentAngle, scale: depthScale, z: z, isFalling: false });
+            }
+        }
+        node.children.forEach(child => drawNode(child, time, curX, curY, currentAngle, depthScale, solarTone, z, currentLeafList));
+    }
+}
+
+function getMeterPercentage() {
+    return totalPossibleLeaves > 0 ? (leavesAbsorbed / totalPossibleLeaves) * 100 : 0;
+}
+
+function showLevelCompleteDialog() {
+    if (levelCompleteShown) return;
+    levelCompleteShown = true;
+    const isFinalLevel = currentLevel >= MAX_LEVEL;
+    const nextLevel = Math.min(MAX_LEVEL, currentLevel + 1);
+    nextLevelBtnEl.textContent = isFinalLevel ? 'RESTART FROM LEVEL 1' : `START LEVEL ${nextLevel}`;
+    levelDialogEl.querySelector('#level-dialog-title').textContent = isFinalLevel ? 'RUN COMPLETE' : 'LEVEL COMPLETE';
+    levelDialogEl.querySelector('#level-dialog-body').textContent = isFinalLevel
+        ? `Level ${currentLevel} cleared. You completed all ${MAX_LEVEL} levels.`
+        : `Target reached. Proceed to Level ${nextLevel} with one additional obstacle block.`;
+    levelDialogEl.classList.add('show');
+}
+
+
+/* CHANGE: Show the canopy-growth modal while the preview tree growth is rendering */
+function showGrowingCanopyModal() {
+    startSequencePhase = 'growing';
+    levelStarted = false;
+    canopyPreviewTime = 0;
+    /* CHANGE: Reset the delayed start-help timer and visibility at the beginning of each level intro */
+    startReadyWaitTime = 0;
+    startHelpFlashTime = 0;
+    /* CHANGE: Keep the help timer reset until the start dialog has actually been closed */
+    postStartNoShakeTime = 0;
+    /* CHANGE: Reset the post-start shake-hint timer/state for the new intro sequence */
+    postStartNoShakeTime = 0;
+    playerHasShakenThisLevel = false;
+    startHelpEl.classList.remove('show');
+    startDialogEl.classList.add('show');
+    startDialogEl.classList.remove('ready');
+    startDialogTitleEl.textContent = 'Growing Trees >> Generating Canopy';
+    startDialogBodyEl.textContent = 'Please wait while the level canopy finishes growing.';
+}
+
+/* CHANGE: After the canopy is visible, wait for Space or a tap/click before enabling gameplay updates */
+function showPressSpaceModal() {
+    startSequencePhase = 'ready';
+    levelStarted = false;
+    /* CHANGE: Start the delayed help countdown only after the canopy is fully available */
+    startReadyWaitTime = 0;
+    startHelpFlashTime = 0;
+    startHelpEl.classList.remove('show');
+    startDialogEl.classList.add('show');
+    startDialogEl.classList.add('ready');
+    startDialogTitleEl.textContent = 'Press Space To start';
+    startDialogBodyEl.textContent = 'The canopy is ready. Press Space or tap/click to begin.';
+}
+
+/* CHANGE: Start the actual game loop only after the canopy preview has finished rendering */
+function beginGameplayLoop() {
+    if (startSequencePhase !== 'ready') return;
+    levelStarted = true;
+    startSequencePhase = 'running';
+    globalTime = Math.max(globalTime, canopyPreviewTime);
+    /* CHANGE: Hide the one-time delayed help prompt as soon as the player starts the level */
+    startHelpFlashTime = 0;
+    startHelpEl.classList.remove('show');
+    /* CHANGE: Start counting the delayed shake hint only after the start dialog has been closed */
+    postStartNoShakeTime = 0;
+    startDialogEl.classList.remove('show');
+    startDialogEl.classList.remove('ready');
+}
+
+function updateLevelUI() {
+    meterLabelEl.textContent = `LEVEL ${currentLevel} • ABSORPTION VOLUME`;
+}
+
+function updateMeter() {
+    const percentage = getMeterPercentage();
+    meterFillEl.style.width = percentage + '%';
+    if (!levelCompleteShown && percentage >= LEVEL_TARGET_PERCENT) {
+        showLevelCompleteDialog();
+    }
+}
+
+function spawnPipeBulge(z) {
+    pipeBulges.push({
+        x: width - 6,
+        y: height - 4,
+        z: z,
+        state: 'rising',
+        radius: 8 + (z * 6),
+        speed: 11 + (z * 2),
+        pop: 0
+    });
+}
+
+function updateAndDrawPipeBulges() {
+    const meterRightEdge = width * 0.8;
+    const bridgeY = 24;
+    const pulse = 0.9 + Math.sin(globalTime * 8) * 0.08;
+
+    ctx.lineWidth = 2;
+
+    for (let i = pipeBulges.length - 1; i >= 0; i--) {
+        const b = pipeBulges[i];
+
+        if (b.state === 'rising') {
+            b.y -= b.speed;
+            if (b.y <= bridgeY) {
+                b.y = bridgeY;
+                b.state = 'bridging';
+            }
+        } else if (b.state === 'bridging') {
+            b.x -= b.speed * 1.1;
+            if (b.x <= meterRightEdge) {
+                b.x = meterRightEdge;
+                b.state = 'burst';
+                b.pop = 0;
+                b.seed = (b.z * 17.731) + globalTime;
+                leavesAbsorbed++;
+                meterBurstCharge = Math.min(1.9, meterBurstCharge + 0.22);
+                updateMeter();
+            }
+        } else if (b.state === 'burst') {
+            b.pop += 0.13;
+            if (b.pop >= 1) {
+                pipeBulges.splice(i, 1);
+                continue;
+            }
+        }
+
+        if (b.state !== 'burst') {
+            const coreR = b.radius * pulse;
+            ctx.fillStyle = 'rgba(150, 210, 255, 0.28)';
+            ctx.beginPath();
+            ctx.ellipse(b.x, b.y, coreR * 1.2, coreR * 0.9, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(235, 245, 255, 0.9)';
+            ctx.beginPath();
+            ctx.ellipse(b.x, b.y, coreR * 0.6, coreR * 0.45, 0, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            const burst = b.pop;
+            const alpha = 1 - burst;
+            const coreR = 5 + burst * 14;
+            const seed = b.seed || 0;
+
+            ctx.fillStyle = `rgba(255, 248, 228, ${alpha * 0.92})`;
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, coreR, 0, Math.PI * 2);
+            ctx.fill();
+
+            const palettes = [
+                ['255,245,210', '255,170,95'],
+                ['180,235,255', '120,170,255'],
+                ['255,120,200', '255,90,140'],
+                ['170,255,210', '90,220,170'],
+                ['255,210,120', '255,120,60']
+            ];
+
+            for (let s = 0; s < 16; s++) {
+                const t = seed + (s * 1.618);
+                const angle = (Math.PI * 2 * s / 16) + Math.sin(t) * 0.32;
+                const len = 15 + burst * (20 + (s % 5) * 6);
+                const inner = 2 + burst * 4;
+                const outer = inner + len;
+                const mid = inner + len * 0.62;
+                const dx0 = Math.cos(angle) * inner;
+                const dy0 = Math.sin(angle) * inner;
+                const dxm = Math.cos(angle) * mid;
+                const dym = Math.sin(angle) * mid;
+                const dx1 = Math.cos(angle) * outer;
+                const dy1 = Math.sin(angle) * outer;
+                const pal = palettes[s % palettes.length];
+
+                ctx.lineWidth = 1.4 + ((16 - s) % 3);
+                ctx.strokeStyle = `rgba(${pal[0]}, ${alpha * 0.6})`;
+                ctx.beginPath();
+                ctx.moveTo(b.x + dx0, b.y + dy0);
+                ctx.lineTo(b.x + dxm, b.y + dym);
+                ctx.stroke();
+
+                ctx.lineWidth = 0.8 + (s % 2);
+                ctx.strokeStyle = `rgba(${pal[1]}, ${alpha * 0.9})`;
+                ctx.beginPath();
+                ctx.moveTo(b.x + dxm, b.y + dym);
+                ctx.lineTo(b.x + dx1, b.y + dy1);
+                ctx.stroke();
+
+                ctx.fillStyle = `rgba(${pal[1]}, ${alpha * 0.88})`;
+                ctx.beginPath();
+                ctx.arc(b.x + dx1, b.y + dy1, 1.8 + ((s + 1) % 3), 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            for (let e = 0; e < 10; e++) {
+                const t = seed * 0.7 + (e * 2.11);
+                const angle = (Math.PI * 2 * e / 10) + Math.cos(t) * 0.45;
+                const dist = 8 + burst * (16 + (e % 4) * 6);
+                const ex = b.x + Math.cos(angle) * dist;
+                const ey = b.y + Math.sin(angle) * dist;
+                const hue = palettes[(e + 1) % palettes.length][0];
+                ctx.fillStyle = `rgba(${hue}, ${alpha * 0.5})`;
+                ctx.beginPath();
+                ctx.arc(ex, ey, 1.4 + (e % 2), 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+}
+
+function spawnSmokePuff(x, y) {
+    smokePuffs.push({
+        x: x,
+        y: y,
+        t: 0,
+        life: 0.6 + Math.random() * 0.25,
+        parts: Array.from({length: 7}, (_, i) => ({
+            ox: (Math.random() - 0.5) * 10,
+            oy: (Math.random() - 0.5) * 8,
+            vx: (Math.random() - 0.5) * 1.4,
+            vy: -0.6 - Math.random() * 1.2,
+            r: 4 + Math.random() * 6,
+            a: 0.45 + Math.random() * 0.25
+        }))
+    });
+}
+
+function updateAndDrawSmokePuffs() {
+    for (let i = smokePuffs.length - 1; i >= 0; i--) {
+        const s = smokePuffs[i];
+        s.t += 0.016;
+        const p = Math.min(1, s.t / s.life);
+        const alpha = 1 - p;
+        if (p >= 1) {
+            smokePuffs.splice(i, 1);
+            continue;
+        }
+        for (const part of s.parts) {
+            const px = s.x + part.ox + part.vx * (p * 38);
+            const py = s.y + part.oy + part.vy * (p * 34) - p * 10;
+            const pr = part.r * (0.55 + p * 0.95);
+            ctx.fillStyle = `rgba(${90 + Math.floor(p*40)}, ${90 + Math.floor(p*40)}, ${90 + Math.floor(p*40)}, ${part.a * alpha})`;
+            ctx.fillRect((px - pr * 0.5) | 0, (py - pr * 0.5) | 0, Math.max(2, pr | 0), Math.max(2, pr | 0));
+        }
+    }
+}
+
+/* CHANGE: Level 5+ fire-drip hazard system */
+/* CHANGE: Level-based fire-drip pacing helper:
+   - Level 5 starts slower
+   - Each later level increases drip frequency slightly
+   - Random jitter is preserved so all blocks do not drip in sync */
+function getLevelDripRateRange(level) {
+    const levelStep = Math.max(0, level - 5);
+    /* CHANGE: Lower base delay at higher levels by shrinking the drip interval a little each level */
+    const minRate = Math.max(0.52, 1.85 - levelStep * 0.14);
+    /* CHANGE: Keep a small range above the minimum so drip cadence still feels organic */
+    const maxRate = Math.max(minRate + 0.12, 2.75 - levelStep * 0.18);
+    return { minRate, maxRate };
+}
+
+function spawnFireDrip(block) {
+    if (currentLevel < 5) return;
+    const landX = Math.max(30, block.x - (18 + Math.random() * 70));
+    const landY = sampleTerrainY(block.dripLayerIndex, landX);
+    fireDrips.push({
+        x: block.x + 3,
+        y: block.y + 10 + Math.random() * Math.max(8, block.h - 20),
+        targetX: landX,
+        targetY: landY,
+        vx: -0.4 - Math.random() * 0.45,
+        vy: 1.8 + Math.random() * 0.7,
+        size: 5 + Math.random() * 3,
+        heat: Math.random() * 10
+    });
+}
+
+function updateFireHazards() {
+    if (currentLevel < 5) return;
+
+    for (const b of obstacleBlocks) {
+        b.dripTimer -= 0.016;
+        if (b.dripTimer <= 0) {
+            spawnFireDrip(b);
+            /* CHANGE: Re-arm drip timer from the level-scaled interval with light randomness */
+            b.dripTimer = b.dripRate * (0.75 + Math.random() * 0.7);
+        }
+    }
+
+    for (let i = fireDrips.length - 1; i >= 0; i--) {
+        const d = fireDrips[i];
+        d.vy += 0.08;
+        d.x += d.vx;
+        d.y += d.vy;
+        if (d.y >= d.targetY) {
+            groundFires.push({
+                x: d.targetX,
+                y: d.targetY,
+                radius: 12 + Math.random() * 4,
+                maxRadius: 28 + Math.random() * 26,
+                spread: 0.55 + Math.random() * 0.35,
+                life: 7.5 + Math.random() * 2.5,
+                age: 0,
+                phase: d.heat
+            });
+            fireDrips.splice(i, 1);
+        }
+    }
+
+    for (let i = groundFires.length - 1; i >= 0; i--) {
+        const g = groundFires[i];
+        g.age += 0.016;
+        g.phase += 0.08;
+        if (g.radius < g.maxRadius) g.radius = Math.min(g.maxRadius, g.radius + g.spread);
+        if (g.age >= g.life) {
+            groundFires.splice(i, 1);
+            continue;
+        }
+    }
+}
+
+function drawFireHazards() {
+    if (currentLevel < 5) return;
+
+    for (const g of groundFires) {
+        const alpha = Math.max(0, 1 - (g.age / g.life));
+        const wave = Math.sin(g.phase) * 3 + Math.sin(g.phase * 0.6 + g.x * 0.02) * 2;
+        const inner = g.radius * 0.45;
+        const outer = g.radius + wave;
+        ctx.fillStyle = `rgba(60, 0, 0, ${0.24 * alpha})`;
+        ctx.beginPath();
+        ctx.ellipse(g.x, g.y + 3, outer * 1.15, outer * 0.42, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = `rgba(180, 30, 0, ${0.50 * alpha})`;
+        ctx.beginPath();
+        ctx.ellipse(g.x, g.y, outer, outer * 0.32, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = `rgba(255, 150, 0, ${0.68 * alpha})`;
+        ctx.beginPath();
+        ctx.ellipse(g.x, g.y - 1, inner * 1.45, inner * 0.22, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = `rgba(255, 230, 120, ${0.85 * alpha})`;
+        for (let k = 0; k < 5; k++) {
+            const t = g.phase * 1.4 + k * 1.17;
+            const px = g.x + Math.cos(t) * (inner * 0.5 + k * 1.5);
+            const py = g.y - 2 + Math.sin(t * 1.8) * 2;
+            ctx.fillRect(px | 0, py | 0, 2, 2);
+        }
+    }
+
+    for (const d of fireDrips) {
+        const tailY = d.y - Math.max(6, d.vy * 2.4);
+        ctx.fillStyle = 'rgba(255, 200, 90, 0.9)';
+        ctx.fillRect((d.x - 1) | 0, tailY | 0, 2, Math.max(4, (d.y - tailY) | 0));
+        ctx.fillStyle = 'rgba(255, 110, 0, 0.95)';
+        ctx.fillRect((d.x - d.size * 0.5) | 0, (d.y - d.size * 0.5) | 0, Math.max(3, d.size | 0), Math.max(3, d.size | 0));
+    }
+}
+
+function leafHitsGroundFire(l) {
+    if (currentLevel < 5) return false;
+    for (const g of groundFires) {
+        const dx = l.x - g.x;
+        const dy = l.y - g.y;
+        if (Math.abs(dy) < 12 && (dx * dx + dy * dy) < (g.radius * g.radius * 0.95)) {
+            spawnSmokePuff(l.x, l.y);
+            return true;
+        }
+    }
+    return false;
+}
+
+function generateObstacleBlocks() {
+    obstacleBlocks = [];
+    const count = BASE_OBSTACLE_COUNT + (currentLevel - 1);
+    const safeTop = 70;
+    const safeLeft = 70;
+    const safeRight = width - 200;
+    const safeBottom = height - 130;
+    let attempts = 0;
+
+    while (obstacleBlocks.length < count && attempts < 500) {
+        attempts++;
+        const narrow = Math.random() > 0.5;
+        const bw = narrow ? 50 : 100;
+        const bh = 100;
+        const bx = safeLeft + Math.random() * Math.max(1, safeRight - safeLeft - bw);
+        const by = safeTop + Math.random() * Math.max(1, safeBottom - safeTop - bh);
+        /* CHANGE: Level 5+ fire-drip source metadata */
+        /* CHANGE: Level-based drip pacing setup so Level 5 starts calmer and later levels get slightly faster */
+        const dripRateRange = getLevelDripRateRange(currentLevel);
+        const candidate = {
+            x: bx, y: by, w: bw, h: bh, fireSide: 'left', flamePhase: Math.random() * 10,
+            dripLayerIndex: 4 + ((Math.random() * Math.max(1, terrainPoints.length - 4)) | 0),
+            /* CHANGE: Store a per-block drip interval based on the current level difficulty */
+            dripRate: dripRateRange.minRate + Math.random() * (dripRateRange.maxRate - dripRateRange.minRate),
+            /* CHANGE: Stagger initial drips so new levels do not all fire at once */
+            dripTimer: 0.55 + Math.random() * 1.4
+        };
+
+        let overlaps = false;
+        for (const b of obstacleBlocks) {
+            if (candidate.x < b.x + b.w + 26 && candidate.x + candidate.w + 26 > b.x &&
+                candidate.y < b.y + b.h + 26 && candidate.y + candidate.h + 26 > b.y) {
+                overlaps = true;
+                break;
+            }
+        }
+        if (!overlaps) obstacleBlocks.push(candidate);
+    }
+}
+
+function drawObstacleBlocks() {
+    for (const b of obstacleBlocks) {
+        ctx.fillStyle = 'rgba(68, 72, 86, 0.95)';
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+
+        ctx.fillStyle = 'rgba(128, 132, 146, 0.65)';
+        ctx.fillRect(b.x + 4, b.y + 4, b.w - 8, 6);
+        ctx.fillRect(b.x + 4, b.y + 4, 6, b.h - 8);
+
+        ctx.fillStyle = 'rgba(34, 36, 46, 0.75)';
+        ctx.fillRect(b.x + 4, b.y + b.h - 10, b.w - 8, 6);
+        ctx.fillRect(b.x + b.w - 10, b.y + 4, 6, b.h - 8);
+
+        const brickH = 20;
+        const brickW = 25;
+        for (let row = 0; row < b.h; row += brickH) {
+            const offset = ((row / brickH) % 2) * Math.floor(brickW / 2);
+            for (let col = -offset; col < b.w; col += brickW) {
+                const rx = b.x + col;
+                const ry = b.y + row;
+                const rw = Math.min(brickW - 2, b.x + b.w - 4 - rx);
+                const rh = Math.min(brickH - 2, b.y + b.h - 4 - ry);
+                if (rw > 6 && rh > 6 && rx > b.x + 1 && ry > b.y + 1) {
+                    ctx.fillStyle = ((row / brickH + col / brickW) % 2 === 0) ? 'rgba(96, 100, 116, 0.9)' : 'rgba(84, 88, 104, 0.9)';
+                    ctx.fillRect(rx + 1, ry + 1, rw, rh);
+                    ctx.fillStyle = 'rgba(150, 154, 168, 0.28)';
+                    ctx.fillRect(rx + 2, ry + 2, Math.max(2, rw - 4), 2);
+                }
+            }
+        }
+
+        ctx.fillStyle = 'rgba(22, 24, 32, 0.35)';
+        for (let yy = b.y + 8; yy < b.y + b.h - 6; yy += 16) {
+            const px = b.x + 8 + ((yy * 13) % Math.max(12, b.w - 16));
+            ctx.fillRect(px, yy, 4, 4);
+        }
+
+        const frame = globalTime * 4.8 + b.flamePhase;
+        const waveInset = 14;
+        const waveThickness = 16;
+        const sampleCount = Math.max(10, ((b.h / 8) | 0));
+        const baseX = b.x + 6;
+
+        for (let i = 0; i < sampleCount; i++) {
+            const t0 = i / sampleCount;
+            const t1 = (i + 1) / sampleCount;
+            const y0 = b.y + t0 * b.h;
+            const y1 = b.y + t1 * b.h;
+
+            const wave0 = Math.sin(frame + t0 * 7.2) * 3.6 + Math.sin(frame * 0.7 + t0 * 15.0) * 2.1;
+            const wave1 = Math.sin(frame + t1 * 7.2) * 3.6 + Math.sin(frame * 0.7 + t1 * 15.0) * 2.1;
+
+            const hot0 = baseX - 2 + wave0 * 0.35;
+            const hot1 = baseX - 2 + wave1 * 0.35;
+
+            const mid0 = baseX - waveInset * 0.38 + wave0 * 0.9;
+            const mid1 = baseX - waveInset * 0.38 + wave1 * 0.9;
+
+            const outer0 = baseX - waveThickness - 2 + wave0 * 1.5 - Math.sin(frame * 1.6 + t0 * 11.0) * 1.8;
+            const outer1 = baseX - waveThickness - 2 + wave1 * 1.5 - Math.sin(frame * 1.6 + t1 * 11.0) * 1.8;
+
+            const ember0 = baseX + 1 + Math.sin(frame * 1.1 + t0 * 13.5) * 1.5;
+            const ember1 = baseX + 1 + Math.sin(frame * 1.1 + t1 * 13.5) * 1.5;
+
+            ctx.fillStyle = ((i + ((frame * 3) | 0)) % 2 === 0) ? '#2a0000' : '#4a0500';
+            ctx.beginPath();
+            ctx.moveTo(outer0 | 0, y0 | 0);
+            ctx.lineTo(mid0 | 0, y0 | 0);
+            ctx.lineTo(mid1 | 0, y1 | 0);
+            ctx.lineTo(outer1 | 0, y1 | 0);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = ((i + ((frame * 5) | 0)) % 2 === 0) ? '#b32000' : '#d43a00';
+            ctx.beginPath();
+            ctx.moveTo(mid0 | 0, y0 | 0);
+            ctx.lineTo(hot0 | 0, y0 | 0);
+            ctx.lineTo(hot1 | 0, y1 | 0);
+            ctx.lineTo(mid1 | 0, y1 | 0);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = ((i + ((frame * 7) | 0)) % 2 === 0) ? '#ff9a00' : '#ffbf1f';
+            ctx.beginPath();
+            ctx.moveTo(hot0 | 0, y0 | 0);
+            ctx.lineTo(ember0 | 0, y0 | 0);
+            ctx.lineTo(ember1 | 0, y1 | 0);
+            ctx.lineTo(hot1 | 0, y1 | 0);
+            ctx.closePath();
+            ctx.fill();
+
+            if ((i % 3) !== 1) {
+                const flareLen = 3 + (((Math.sin(frame * 1.8 + t0 * 19.0) + 1) * 0.5) * 6 | 0);
+                const flareY = (y0 + (y1 - y0) * 0.45) | 0;
+                const flareX = (outer0 - 1) | 0;
+                ctx.fillStyle = '#ff5a00';
+                ctx.fillRect(flareX - flareLen, flareY - 1, flareLen, 2);
+                if ((i % 4) === 0) {
+                    ctx.fillStyle = '#ffd86b';
+                    ctx.fillRect(flareX - flareLen + 1, flareY, Math.max(1, flareLen - 2), 1);
+                }
+            }
+        }
+
+        ctx.fillStyle = 'rgba(255, 214, 92, 0.9)';
+        for (let j = 0; j < 5; j++) {
+            const sy = b.y + 10 + ((((frame * 11) + j * 17) % (b.h - 20)) | 0);
+            const sx = b.x - 6 - ((j * 3) % 5);
+            ctx.fillRect(sx, sy, 2, 2);
+            if ((j % 2) === 0) ctx.fillRect(sx - 2, sy + 1, 1, 1);
+        }
+    }
+}
+
+function resolveLeafObstacleCollision(l) {
+    const pad = 3;
+    const flameDepth = 10;
+    for (const b of obstacleBlocks) {
+        if (l.x > b.x - pad && l.x < b.x + b.w + pad && l.y > b.y - pad && l.y < b.y + b.h + pad) {
+            if (l.x <= b.x + flameDepth && l.y >= b.y && l.y <= b.y + b.h) {
+                spawnSmokePuff(b.x + 4, l.y);
+                return true;
+            }
+
+            const leftPen = Math.abs(l.x - b.x);
+            const rightPen = Math.abs((b.x + b.w) - l.x);
+            const topPen = Math.abs(l.y - b.y);
+            const bottomPen = Math.abs((b.y + b.h) - l.y);
+            const minPen = Math.min(leftPen, rightPen, topPen, bottomPen);
+
+            if (minPen === leftPen) {
+                l.x = b.x - pad;
+                if (l.vx > 0) l.vx *= -0.35;
+            } else if (minPen === rightPen) {
+                l.x = b.x + b.w + pad;
+                if (l.vx < 0) l.vx *= -0.35;
+            } else if (minPen === topPen) {
+                l.y = b.y - pad;
+                if (l.vy > 0) l.vy *= -0.25;
+                l.grounded = true;
+                l.settleY = l.y;
+            } else {
+                l.y = b.y + b.h + pad;
+                if (l.vy < 0) l.vy = 0.2;
+            }
+        }
+    }
+    return false;
+}
+
+function drawSuckerWall(time) {
+    const glowPulse = 0.3 + (Math.sin(time * 4) + 1) * 0.2;
+    const xEdge = width - 6;
+    
+    // Vacuum Pipe Housing (Transparent Glassy look)
+    ctx.fillStyle = 'rgba(122, 178, 255, 0.05)';
+    ctx.fillRect(xEdge - 15, 24, 30, height);
+    
+    // External Broad Glow
+    ctx.shadowBlur = 30;
+    ctx.shadowColor = 'rgba(122, 178, 255, 0.8)';
+    ctx.strokeStyle = `rgba(122, 178, 255, ${glowPulse * 0.4})`;
+    ctx.lineWidth = 12;
+    
+    ctx.beginPath();
+    ctx.moveTo(xEdge, 24); 
+    ctx.lineTo(xEdge, height);
+    ctx.stroke();
+
+    // Internal Neon Core
+    ctx.shadowBlur = 10;
+    ctx.strokeStyle = `rgba(200, 220, 255, ${glowPulse})`;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(xEdge, 24);
+    ctx.lineTo(xEdge, height);
+    ctx.stroke();
+    
+    // Bridge Pipe
+    const meterRightEdge = width * 0.8; 
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(xEdge, 24);
+    ctx.lineTo(meterRightEdge, 24);
+    ctx.stroke();
+    
+    ctx.shadowBlur = 0;
+}
+
+function init() {
+    resize();
+    globalTime = 0;
+    /* CHANGE: Reset canopy preview state for the level-start sequence */
+    canopyPreviewTime = 0;
+    levelStarted = false;
+    startSequencePhase = 'growing';
+    /* CHANGE: Reset the one-time delayed start-help state for the new level */
+    startReadyWaitTime = 0;
+    startHelpShownThisLevel = false;
+    startHelpFlashTime = 0;
+    /* CHANGE: Reset the post-start delayed shake-hint state for each level */
+    postStartNoShakeTime = 0;
+    playerHasShakenThisLevel = false;
+    fallingLeaves = [];
+    pipeBulges = [];
+    obstacleBlocks = [];
+    smokePuffs = [];
+    /* CHANGE: Reset Level 5+ fire-drip hazards */
+    fireDrips = [];
+    groundFires = [];
+    treeScene = [];
+    leavesAbsorbed = 0;
+    meterBurstCharge = 0;
+    totalPossibleLeaves = 0;
+    levelCompleteShown = false;
+    levelDialogEl.classList.remove('show');
+    /* CHANGE: Show the canopy-growth modal immediately on level load while render continues normally */
+    showGrowingCanopyModal();
+    updateLevelUI();
+    updateMeter();
+    generateObstacleBlocks();
+    const treeCount = 18;
+    for (let i = 0; i < treeCount; i++) {
+        const z = i / (treeCount - 1); 
+        const xPos = (width * 0.05) + (Math.random() * width * 0.9);
+        const yPos = horizon + (z * (height - horizon) * 0.8);
+        const scale = 0.25 + (z * 0.85); 
+        const treeDNA = createNode(xPos, yPos, -Math.PI / 2, height * 0.22 * scale, 8, z);
+        totalPossibleLeaves += countLeaves(treeDNA);
+        treeScene.push({ x: xPos, y: yPos, z: z, scale: scale, dna: treeDNA });
+    }
+    treeScene.sort((a, b) => a.z - b.z);
+}
+
+function startLevel(level) {
+    currentLevel = level;
+    init();
+}
+
+nextLevelBtnEl.addEventListener('click', () => {
+    if (!levelCompleteShown) return;
+    if (currentLevel >= MAX_LEVEL) startLevel(1);
+    else startLevel(currentLevel + 1);
+});
+
+window.addEventListener('keydown', (e) => {
+    /* CHANGE: Space now starts the actual gameplay only after the canopy preview is complete */
+    if (e.code === 'Space' && startSequencePhase === 'ready') {
+        e.preventDefault();
+        beginGameplayLoop();
+        return;
+    }
+    if (e.code === 'Space' && levelStarted) {
+        /* CHANGE: Mark that the player has used the shake control so the delayed shake hint will not appear */
+        playerHasShakenThisLevel = true;
+        /* CHANGE: Stop the delayed shake-help message immediately once the player shakes the trees */
+        startHelpFlashTime = 0;
+        startHelpEl.classList.remove('show');
+        startHelpEl.style.opacity = '0';
+        windVelocity += (Math.random() > 0.5 ? 1 : -1) * 0.5;
+    }
+    if (e.code === 'Escape') init();
+    if (e.code === 'Enter' && levelCompleteShown) {
+        if (currentLevel >= MAX_LEVEL) startLevel(1);
+        else startLevel(currentLevel + 1);
+    }
+});
+
+/* CHANGE: Allow a tap/click to start once the canopy preview has completed */
+window.addEventListener('pointerdown', () => {
+    if (startSequencePhase === 'ready') beginGameplayLoop();
+    /* CHANGE: On touch devices, a real pointer press during gameplay counts as the player attempting a gust */
+    if (levelStarted) playerHasShakenThisLevel = true;
+});
+
+window.addEventListener('mousemove', (e) => {
+    const worldX = (e.clientX - camera.x) / camera.scale;
+    const worldY = (e.clientY - camera.y) / camera.scale;
+    mouseWind.vx = (worldX - lastMouse.x) * 0.2;
+    mouseWind.vy = (worldY - lastMouse.y) * 0.2;
+    mouseWind.x = worldX; mouseWind.y = worldY;
+    lastMouse.x = worldX; lastMouse.y = worldY;
+});
+/* CHANGE: Clicking immediately restores the AOE marker while keeping the existing blow mechanic unchanged */
+window.addEventListener('mousedown', () => {
+    mouseWind.active = true;
+    aoeVisual.alpha = Math.max(aoeVisual.alpha, 0.92);
+    /* CHANGE: Any real mouse gust attempt counts as player interaction for suppressing the delayed shake hint */
+    if (levelStarted) playerHasShakenThisLevel = true;
+});
+/* CHANGE: Releasing no longer hides the AOE instantly; the visual now fades out smoothly on its own */
+window.addEventListener('mouseup', () => { mouseWind.active = false; });
+
+/* CHANGE: Draw a smaller pointer AOE indicator and flex its boundary in the current gust direction while keeping gameplay unchanged */
+function drawPointerAOEIndicator() {
+    /* CHANGE: The AOE marker now has its own visibility state so it can linger and fade after release */
+    const targetAlpha = mouseWind.active ? 1 : 0;
+    aoeVisual.alpha += (targetAlpha - aoeVisual.alpha) * MOUSE_WIND_AOE_FADE_LERP;
+    if (aoeVisual.alpha < MOUSE_WIND_AOE_MIN_VISIBLE_ALPHA && !mouseWind.active) return;
+
+    const pulse = 0.5 + 0.5 * Math.sin(globalTime * 4.5);
+    const aoeAlpha = Math.max(0, Math.min(1, aoeVisual.alpha));
+
+    /* CHANGE: Read the existing gust vector only for visuals so the AOE ring flexes in the gust direction */
+    const speed = Math.hypot(mouseWind.vx, mouseWind.vy);
+    let targetDirX = aoeVisual.dirX, targetDirY = aoeVisual.dirY;
+    if (speed > MOUSE_WIND_AOE_MIN_DIR) {
+        targetDirX = mouseWind.vx / speed;
+        targetDirY = mouseWind.vy / speed;
+    }
+
+    /* CHANGE: Smooth the gust direction visually so the ring turns with a fluid, organic lag instead of twitching */
+    aoeVisual.dirX += (targetDirX - aoeVisual.dirX) * MOUSE_WIND_AOE_DIRECTION_LERP;
+    aoeVisual.dirY += (targetDirY - aoeVisual.dirY) * MOUSE_WIND_AOE_DIRECTION_LERP;
+    const dirLen = Math.hypot(aoeVisual.dirX, aoeVisual.dirY) || 1;
+    const dirX = aoeVisual.dirX / dirLen;
+    const dirY = aoeVisual.dirY / dirLen;
+
+    /* CHANGE: Build a much heavier target deformation so the AOE moves like a thick viscous blob and does not instantly mirror pointer speed */
+    const speedRatio = Math.min(1, speed / MOUSE_WIND_AOE_SPEED_FOR_MAX_BULGE);
+    const smoothBulge = speedRatio * speedRatio * (3 - 2 * speedRatio);
+    const heavyResponse = Math.pow(smoothBulge, 0.72);
+    const rawTargetBulge = MOUSE_WIND_AOE_BULGE * (0.48 + heavyResponse * 1.9);
+    aoeVisual.targetBulge += (rawTargetBulge - aoeVisual.targetBulge) * MOUSE_WIND_AOE_TARGET_LERP;
+    aoeVisual.bulgeVel += (aoeVisual.targetBulge - aoeVisual.bulge) * MOUSE_WIND_AOE_SPRING;
+    aoeVisual.bulgeVel *= MOUSE_WIND_AOE_RETURN_DAMPING;
+    aoeVisual.bulge += aoeVisual.bulgeVel;
+
+    /* CHANGE: Add a slow trailing smear so the front of the boundary drags behind like dense mercury being pushed through syrup */
+    const targetSmear = heavyResponse * (0.7 + 0.3 * Math.sin(globalTime * 1.35));
+    aoeVisual.smearVel += (targetSmear - aoeVisual.smear) * 0.035;
+    aoeVisual.smearVel *= 0.955;
+    aoeVisual.smear += aoeVisual.smearVel;
+
+    /* CHANGE: Slow the secondary wobble right down so the edge undulates like thick fluid instead of jittering like a spring */
+    const targetWobble = heavyResponse * (0.42 + 0.58 * Math.sin(globalTime * 1.8));
+    aoeVisual.wobbleVel += (targetWobble - aoeVisual.wobble) * 0.022;
+    aoeVisual.wobbleVel *= 0.965;
+    aoeVisual.wobble += aoeVisual.wobbleVel;
+
+    const bulge = Math.max(10, aoeVisual.bulge);
+    const sideWave = 0.1 + heavyResponse * 0.08 + Math.abs(aoeVisual.wobble) * 0.08;
+
+    /* CHANGE: Build a much smoother, heavier boundary that swells forward and drags its mass with a slow oily smear like thick mercury */
+    function buildBulgedCirclePath(radius, phaseOffset) {
+        const pts = [];
+        const steps = 132;
+        for (let i = 0; i <= steps; i++) {
+            const a = (i / steps) * Math.PI * 2;
+            const ux = Math.cos(a), uy = Math.sin(a);
+            const align = ux * dirX + uy * dirY;
+            const side = ux * (-dirY) + uy * dirX;
+            const frontBias = Math.max(0, align);
+            const backBias = Math.max(0, -align);
+            const sideBias = Math.max(0, 1 - Math.abs(align));
+            const frontSmear = Math.pow(frontBias, 1.65);
+            const shoulder = Math.pow(Math.max(0, 1 - Math.abs(side) * 0.92), 2.25) * frontBias;
+            const oilyWave = (
+                Math.sin(a * 0.9 + globalTime * 0.9 + phaseOffset) * 0.5 +
+                Math.sin(a * 1.8 - globalTime * 0.62 + phaseOffset * 1.35) * 0.32 +
+                Math.sin(a * 2.7 + globalTime * 0.38 + phaseOffset * 0.55) * 0.18
+            ) * sideBias * sideWave * bulge;
+            const localRadius =
+                radius +
+                bulge * 1.85 * frontSmear +
+                bulge * 0.72 * shoulder * (0.55 + aoeVisual.smear) -
+                bulge * 0.12 * backBias +
+                oilyWave +
+                side * bulge * 0.028 * Math.abs(aoeVisual.wobble);
+            pts.push([mouseWind.x + ux * localRadius, mouseWind.y + uy * localRadius]);
+        }
+        return pts;
+    }
+
+    /* CHANGE: Trace the boundary with quadratic smoothing so the ring reads as a soft elastic membrane rather than a jagged polygon */
+    function tracePath(pts) {
+        ctx.beginPath();
+        const firstMidX = (pts[0][0] + pts[1][0]) * 0.5;
+        const firstMidY = (pts[0][1] + pts[1][1]) * 0.5;
+        ctx.moveTo(firstMidX, firstMidY);
+        for (let i = 1; i < pts.length - 1; i++) {
+            const midX = (pts[i][0] + pts[i + 1][0]) * 0.5;
+            const midY = (pts[i][1] + pts[i + 1][1]) * 0.5;
+            ctx.quadraticCurveTo(pts[i][0], pts[i][1], midX, midY);
+        }
+        ctx.quadraticCurveTo(pts[pts.length - 1][0], pts[pts.length - 1][1], firstMidX, firstMidY);
+        ctx.closePath();
+    }
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+
+    const outerPts = buildBulgedCirclePath(MOUSE_WIND_AOE_SOFT_RADIUS + pulse * 2.5, 0.0);
+    tracePath(outerPts);
+    ctx.fillStyle = `rgba(150, 215, 255, ${((0.12 + pulse * 0.04) * MOUSE_WIND_AOE_BRIGHTNESS * aoeAlpha).toFixed(4)})`; 
+    ctx.fill();
+    ctx.lineWidth = 3.15;
+    ctx.strokeStyle = `rgba(225, 248, 255, ${((0.6 + pulse * 0.13) * MOUSE_WIND_AOE_BRIGHTNESS * aoeAlpha).toFixed(4)})`; 
+    ctx.stroke();
+
+    const innerPts = buildBulgedCirclePath(MOUSE_WIND_AOE_POP_RADIUS + pulse * 1.1, 1.3);
+    tracePath(innerPts);
+    ctx.lineWidth = 2.45;
+    ctx.strokeStyle = `rgba(248, 253, 255, ${((0.9 + pulse * 0.18) * MOUSE_WIND_AOE_BRIGHTNESS * aoeAlpha).toFixed(4)})`; 
+    ctx.stroke();
+
+    /* CHANGE: Keep the center point only, with no separate Wi-Fi icon or arc bands */
+    ctx.beginPath();
+    ctx.arc(mouseWind.x, mouseWind.y, 6.4 + pulse * 1.2, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 255, 255, ${((0.92 + pulse * 0.12) * MOUSE_WIND_AOE_BRIGHTNESS * aoeAlpha).toFixed(4)})`; 
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function animate() {
+    /* CHANGE: Keep ambient visual time moving, but drive canopy rendering from a separate preview timer until the player starts the level */
+    globalTime += 0.016;
+    if (startSequencePhase === 'growing') {
+        canopyPreviewTime = Math.min(INTRO_CANOPY_COMPLETE_TIME, canopyPreviewTime + INTRO_GROWTH_STEP);
+        if (canopyPreviewTime >= INTRO_CANOPY_COMPLETE_TIME) {
+            canopyPreviewTime = INTRO_CANOPY_COMPLETE_TIME;
+            showPressSpaceModal();
+        }
+    } else if (startSequencePhase === 'ready') {
+        canopyPreviewTime = INTRO_CANOPY_COMPLETE_TIME;
+        /* CHANGE: Keep the old ready-state timer reset; the delayed shake hint now starts only after gameplay has begun */
+        startReadyWaitTime = 0;
+    } else {
+        canopyPreviewTime = globalTime;
+        /* CHANGE: If the player has not actually shaken or gusted within 10 seconds after the start dialog closes, show the hint once */
+        if (!startHelpShownThisLevel && !playerHasShakenThisLevel) {
+            postStartNoShakeTime += 0.016;
+            if (postStartNoShakeTime >= 10) {
+                startHelpShownThisLevel = true;
+                startHelpFlashTime = 8.0;
+                startHelpEl.classList.add('show');
+            }
+        }
+    }
+
+    /* CHANGE: Flash the delayed help message once per level, then hide it again */
+    if (startHelpFlashTime > 0) {
+        startHelpFlashTime = Math.max(0, startHelpFlashTime - 0.016);
+        const flashAlpha = 0.45 + Math.abs(Math.sin(globalTime * 5.6)) * 0.55;
+        startHelpEl.style.opacity = flashAlpha.toFixed(3);
+        if (startHelpFlashTime <= 0) startHelpEl.classList.remove('show');
+    } else {
+        startHelpEl.style.opacity = '0';
+    }
+    camera.x += (targetCamera.x - camera.x) * 0.1;
+    camera.y += (targetCamera.y - camera.y) * 0.1;
+    camera.scale += (targetCamera.scale - camera.scale) * 0.1;
+    
+    if (levelStarted) meterBurstCharge *= 0.9;
+    const meterScaleX = 1 + Math.min(0.12, meterBurstCharge * 0.045);
+    const meterScaleY = 1 + Math.min(0.8, meterBurstCharge * 0.28);
+    meterContainerEl.style.transform = `translateX(-50%) scale(${meterScaleX}, ${meterScaleY})`;
+    meterContainerEl.style.boxShadow = `0 0 ${8 + meterBurstCharge * 18}px rgba(122, 178, 255, ${0.18 + meterBurstCharge * 0.12})`;
+    meterFillEl.style.boxShadow = `0 0 ${20 + meterBurstCharge * 18}px rgba(122, 178, 255, ${0.8 + meterBurstCharge * 0.08})`;
+    
+    windVelocity += (-springK * windGust); windVelocity *= friction; windGust += windVelocity;
+
+    const shaderWave = (Math.sin(globalTime * 0.3) + 1) / 2;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); 
+    ctx.fillStyle = `rgb(${15 + (shaderWave * 40)}, ${35 + (shaderWave * 60)}, ${80 + (shaderWave * 100)})`;
+    ctx.fillRect(0, 0, width, height);
+
+    const solarTone = { 
+        r: 80 + ((Math.cos(globalTime * 0.14) + 1) / 2)*140, 
+        g: 70 + ((Math.sin(globalTime * 0.2) + 1) / 2)*80, 
+        b: 100 + ((Math.sin(globalTime * 0.2) + 1) / 2)*120 
+    };
+
+    ctx.setTransform(camera.scale, 0, 0, camera.scale, camera.x, camera.y);
+    ctx.beginPath();
+    ctx.fillStyle = `rgba(20, 40, 80, 0.5)`;
+    ctx.moveTo(0, height);
+    distantHorizon.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.lineTo(width, height);
+    ctx.fill();
+
+    drawSuckerWall(globalTime);
+    updateAndDrawPipeBulges();
+    updateAndDrawSmokePuffs();
+    /* CHANGE: Advance Level 5+ fire-drip hazards only during live gameplay */
+    if (levelStarted) updateFireHazards();
+
+    let renderStack = [];
+    treeScene.forEach(tree => renderStack.push({ type: 'tree', z: tree.z, data: tree }));
+    
+    const meterRightEdge = width * 0.8;
+    const bridgeY = 24;
+
+    for (let i = fallingLeaves.length - 1; i >= 0; i--) {
+        let l = fallingLeaves[i];
+
+        // LOGIC FOR FIELD LEAVES
+        /* CHANGE: Field leaf simulation stays paused until the player starts the level, while rendering still continues */
+        if (levelStarted && l.pumpState === 0) {
+            const distFromRight = width - l.x;
+            if (distFromRight < 150) {
+                l.grounded = false;
+                const suckForce = (1 - (distFromRight / 150)) * 0.8;
+                l.vx += suckForce; l.vy -= suckForce * 0.2;
+                if (l.x >= width - 10) { 
+                    spawnPipeBulge(l.z);
+                    fallingLeaves.splice(i, 1);
+                    continue;
+                }
+            }
+            if (!l.grounded) {
+                l.vy += 0.04; l.x += l.vx + Math.sin(globalTime * 2 + l.z) * 0.5; l.y += l.vy; l.rotation += l.vr;
+                if (mouseWind.active) {
+                    const mdx = l.x - mouseWind.x, mdy = l.y - mouseWind.y, mDistSq = mdx*mdx + mdy*mdy;
+                    if (mDistSq < 32400) { const force = (1 - (Math.sqrt(mDistSq) / 180)) * 1.5; l.vx += mouseWind.vx * force; l.vy += mouseWind.vy * force; }
+                }
+                if (l.x < 5) { l.x = 5; l.vx = 0; }
+                if (l.y < 5) { l.y = 5; l.vy = 0; }
+                /* CHANGE: Ground-fire hazard kills leaves on contact from Level 5 onward */
+                if (leafHitsGroundFire(l)) { fallingLeaves.splice(i, 1); continue; }
+                if (resolveLeafObstacleCollision(l)) { fallingLeaves.splice(i, 1); continue; }
+                if (l.y > l.settleY) { l.y = l.settleY; l.grounded = true; l.vx = 0; }
+            } else if (mouseWind.active) {
+                const mdx = l.x - mouseWind.x, mdy = l.y - mouseWind.y, mDistSq = mdx*mdx + mdy*mdy;
+                if (mDistSq < 6400) { l.grounded = false; l.vy = mouseWind.vy - 1.2; l.vx = mouseWind.vx; }
+                /* CHANGE: Ground-fire hazard kills grounded leaves on contact from Level 5 onward */
+                if (leafHitsGroundFire(l)) { fallingLeaves.splice(i, 1); continue; }
+                if (resolveLeafObstacleCollision(l)) { fallingLeaves.splice(i, 1); continue; }
+            }
+        } 
+        if (l.x < 5) l.x = 5; if (l.y < 5) l.y = 5;
+        renderStack.push({ type: 'leaf', z: l.z, data: l });
+    }
+    renderStack.sort((a, b) => a.z - b.z);
+
+    let currentTerrainIdx = 0;
+    renderStack.forEach(obj => {
+        while(currentTerrainIdx < terrainPoints.length && terrainPoints[currentTerrainIdx].z <= obj.z) {
+            const layer = terrainPoints[currentTerrainIdx];
+            ctx.beginPath();
+            ctx.fillStyle = `rgba(${solarTone.r * 0.2}, ${solarTone.g * 0.2}, ${solarTone.b * 0.3}, ${0.2 + (layer.z * 0.4)})`;
+            ctx.moveTo(-width * 5, height * 2); layer.points.forEach(p => ctx.lineTo(p.x, p.y)); ctx.lineTo(width * 5, height * 2); ctx.fill();
+            currentTerrainIdx++;
+        }
+        if (obj.type === 'tree') {
+            let attachedLeaves = [];
+            drawNode(obj.data.dna, globalTime, obj.data.x, obj.data.y, -Math.PI / 2, obj.data.scale, solarTone, obj.data.z, attachedLeaves);
+            attachedLeaves.forEach(l => drawLeaf(l, globalTime, solarTone));
+        } else drawLeaf(obj.data, globalTime, solarTone);
+    });
+
+    while(currentTerrainIdx < terrainPoints.length) {
+        const layer = terrainPoints[currentTerrainIdx];
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(${solarTone.r * 0.2}, ${solarTone.g * 0.2}, ${solarTone.b * 0.3}, 0.3)`;
+        ctx.moveTo(-width * 5, height * 2); layer.points.forEach(p => ctx.lineTo(p.x, p.y)); ctx.lineTo(width * 5, height * 2); ctx.fill();
+        currentTerrainIdx++;
+    }
+
+    /* CHANGE: Draw Level 5+ ground-fire hazards before top-layer obstacle blocks */
+    drawFireHazards();
+    drawObstacleBlocks();
+    /* CHANGE: Draw pointer AOE indicator last so it always sits on the top Z layer above blocks, leaves, and hazards */
+    drawPointerAOEIndicator();
+
+    mouseWind.vx *= 0.85; mouseWind.vy *= 0.85; requestAnimationFrame(animate);
+}
+
+window.addEventListener('resize', init);
+init(); animate();
+</script>
+</body>
+</html>
